@@ -16,7 +16,6 @@ import {
   FolderKanban,
   Globe2,
   Home,
-  Landmark,
   Layers3,
   LockKeyhole,
   LogOut,
@@ -27,17 +26,14 @@ import {
   ReceiptText,
   Search,
   Settings,
-  ShoppingBag,
   Sun,
   Target,
-  Utensils,
   UserRound,
   WalletCards,
   X,
-  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { currencyName } from "@/lib/currencies";
+import { currencyFractionDigits, currencyName, formatCurrencyAmount, normalizeCurrencyAmount } from "@/lib/currencies";
 import MfaSettings from "@/components/mfa-settings";
 import ProjectsDashboard from "@/components/projects-dashboard";
 import CurrencyTools from "@/components/currency-tools";
@@ -50,6 +46,12 @@ import ProfileEditor, { ProfileAvatar, type ProfileUser } from "@/components/pro
 import { featureAvailability, quickActionAvailability, type DashboardFeature } from "@/lib/features";
 import { commonText } from "@/lib/i18n";
 import AccessibleDialog from "@/components/ui/accessible-dialog";
+import { aggregateMonthlyCashFlow } from "@/lib/dashboard";
+import { demoBudgetCategories, demoCashFlow, demoTransactions } from "@/lib/demo-data";
+import { applyTheme, initialTheme, subscribeToSystemTheme } from "@/lib/theme";
+import { DashboardStatCard as StatCard, DashboardStatSkeleton as StatSkeleton } from "@/components/dashboard-stat-card";
+import Button from "@/components/ui/button";
+import { paymentMethodLabel } from "@/lib/payment-methods";
 
 const CashFlowChart = React.lazy(() => import("@/components/ui/cash-flow-chart"));
 
@@ -57,47 +59,6 @@ type Language = "fr" | "en";
 type Theme = "light" | "dark";
 type TransactionKind = "expense" | "income";
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "BANK_CARD" | "MOBILE_MONEY" | "DIGITAL_WALLET" | "DIRECT_DEBIT" | "CHECK" | "OTHER";
-
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "default" | "secondary" | "ghost" | "outline";
-  size?: "default" | "sm" | "icon";
-}
-
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "default", size = "default", className, children, ...props }, ref) => {
-    const variants = {
-      default:
-        "bg-[#1d1e19] text-white shadow-sm hover:bg-[#34352f] dark:bg-[#e9f5d6] dark:text-[#17200c] dark:hover:bg-[#dcebc3]",
-      secondary:
-        "bg-[#e8f2d8] text-[#34491c] hover:bg-[#dceac4] dark:bg-[#28331f] dark:text-[#dcebc3] dark:hover:bg-[#35442a]",
-      ghost:
-        "text-[#6d6f66] hover:bg-[#eeeeea] hover:text-[#1d1e19] dark:text-[#a8aaa1] dark:hover:bg-white/7 dark:hover:text-white",
-      outline:
-        "border border-[#dfdfd9] bg-white text-[#31322c] hover:bg-[#f5f5f1] dark:border-white/10 dark:bg-[#1d1e1a] dark:text-[#e9e9e4] dark:hover:bg-white/7",
-    };
-    const sizes = {
-      default: "h-12 rounded-xl px-4 text-sm lg:h-11",
-      sm: "h-12 rounded-lg px-3 text-sm lg:h-9",
-      icon: "size-12 rounded-xl lg:size-10",
-    };
-
-    return (
-      <button
-        ref={ref}
-        className={cn(
-          "inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all disabled:pointer-events-none disabled:opacity-50 active:scale-[.98]",
-          variants[variant],
-          sizes[size],
-          className,
-        )}
-        {...props}
-      >
-        {children}
-      </button>
-    );
-  },
-);
-Button.displayName = "Button";
 
 const copy: Record<Language, Record<string, string>> = {
   fr: {
@@ -210,22 +171,6 @@ const copy: Record<Language, Record<string, string>> = {
   },
 };
 
-const cashFlowData = [
-  { month: "Mar", income: 3200, expenses: 2180 },
-  { month: "Apr", income: 3600, expenses: 2420 },
-  { month: "May", income: 3400, expenses: 2800 },
-  { month: "Jun", income: 4200, expenses: 2640 },
-  { month: "Jul", income: 3900, expenses: 3020 },
-  { month: "Aug", income: 4520, expenses: 2840 },
-];
-
-const budgetCategories = [
-  { label: "Logement", labelEn: "Housing", amount: 920, total: 1200, color: "bg-[#769450]" },
-  { label: "Alimentation", labelEn: "Food", amount: 486, total: 700, color: "bg-[#dda75b]" },
-  { label: "Transport", labelEn: "Transport", amount: 288, total: 500, color: "bg-[#7799a6]" },
-  { label: "Loisirs", labelEn: "Leisure", amount: 164, total: 400, color: "bg-[#a786a5]" },
-];
-
 interface Transaction {
   id: number | string;
   merchant: string;
@@ -239,56 +184,10 @@ interface Transaction {
   iconStyle: string;
 }
 
-const initialTransactions: Transaction[] = [
-  {
-    id: 1,
-    merchant: "Carrefour Market",
-    category: "Courses",
-    categoryEn: "Groceries",
-    amount: 84.3,
-    kind: "expense",
-    paymentMethod: "BANK_CARD",
-    date: "today",
-    icon: <ShoppingBag size={18} />,
-    iconStyle: "bg-[#f1eadc] text-[#9b6c29] dark:bg-[#3c3020] dark:text-[#e7bb78]",
-  },
-  {
-    id: 2,
-    merchant: "Salaire - ENSEA",
-    category: "Revenu",
-    categoryEn: "Income",
-    amount: 2450,
-    kind: "income",
-    paymentMethod: "BANK_TRANSFER",
-    date: "today",
-    icon: <Landmark size={18} />,
-    iconStyle: "bg-[#e4efdb] text-[#547238] dark:bg-[#26351e] dark:text-[#a9cd83]",
-  },
-  {
-    id: 3,
-    merchant: "Orange Énergie",
-    category: "Factures",
-    categoryEn: "Bills",
-    amount: 62.4,
-    kind: "expense",
-    paymentMethod: "MOBILE_MONEY",
-    date: "yesterday",
-    icon: <Zap size={18} />,
-    iconStyle: "bg-[#f1eadc] text-[#a1722b] dark:bg-[#3c3020] dark:text-[#e7bb78]",
-  },
-  {
-    id: 4,
-    merchant: "La Terrasse",
-    category: "Restaurant",
-    categoryEn: "Dining",
-    amount: 37.8,
-    kind: "expense",
-    paymentMethod: "CASH",
-    date: "yesterday",
-    icon: <Utensils size={18} />,
-    iconStyle: "bg-[#ece6ef] text-[#86678a] dark:bg-[#352839] dark:text-[#c6a1cd]",
-  },
-];
+const initialTransactions: Transaction[] = demoTransactions.map((item) => ({
+  ...item,
+  icon: <CategoryIcon name={item.icon} size={18} />,
+}));
 
 const navItems = [
   { key: "overview", icon: Home },
@@ -302,33 +201,11 @@ const navItems = [
 
 type DashboardNav = (typeof navItems)[number]["key"] | "settings";
 
-function formatCurrency(value: number, language: Language, currency: string) {
-  return new Intl.NumberFormat(language === "fr" ? "fr-FR" : "en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: value % 1 === 0 ? 0 : 2,
-  }).format(value);
-}
-
 function formatTransactionDate(value: string, language: Language, t: (key: string) => string) {
   if (value === "today" || value === "yesterday") return t(value);
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(language === "fr" ? "fr-FR" : "en-US", { dateStyle: "medium" }).format(date);
-}
-
-function paymentMethodLabel(method: PaymentMethod, language: Language) {
-  const values: Record<PaymentMethod, [string, string]> = {
-    CASH: ["Espèces", "Cash"],
-    BANK_TRANSFER: ["Virement bancaire", "Bank transfer"],
-    BANK_CARD: ["Carte bancaire", "Bank card"],
-    MOBILE_MONEY: ["Mobile Money", "Mobile Money"],
-    DIGITAL_WALLET: ["Portefeuille numérique", "Digital wallet"],
-    DIRECT_DEBIT: ["Prélèvement bancaire", "Direct debit"],
-    CHECK: ["Chèque", "Check"],
-    OTHER: ["Autre moyen", "Other method"],
-  };
-  return values[method][language === "fr" ? 0 : 1];
 }
 
 function BrandMark() {
@@ -407,6 +284,7 @@ function AddTransactionModal({
   const [loadingAccounts, setLoadingAccounts] = useState(Boolean(accessToken));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const currencyDecimals = currencyFractionDigits(currency);
 
   React.useEffect(() => {
     if (!accessToken) return;
@@ -436,8 +314,9 @@ function AddTransactionModal({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const numericAmount = Number(amount);
-    if (!name.trim() || !Number.isFinite(numericAmount) || numericAmount <= 0 || !categorySelection) return;
+    const normalizedAmount = normalizeCurrencyAmount(amount, currency);
+    const numericAmount = Number(normalizedAmount);
+    if (!name.trim() || normalizedAmount === null || !Number.isFinite(numericAmount) || numericAmount <= 0 || !categorySelection) return;
     if (accessToken && !accountId) return;
     setBusy(true);
     setError(undefined);
@@ -449,7 +328,7 @@ function AddTransactionModal({
             personalDetailId: categorySelection.personalDetailId,
             type: kind === "income" ? "INCOME" : "EXPENSE",
             paymentMethod,
-            amount: numericAmount.toFixed(2),
+            amount: normalizedAmount,
             transactionDate: `${transactionDate}T12:00:00.000Z`,
             merchant: name.trim(),
             description: name.trim(),
@@ -486,7 +365,7 @@ function AddTransactionModal({
       >
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 id="transaction-dialog-title" className="font-[Manrope_Variable] text-lg font-bold text-[#20211d] dark:text-white">
+            <h2 id="transaction-dialog-title" className="font-[Manrope_Variable] text-lg font-bold text-yahro-text dark:text-white">
               {t("addTransaction")}
             </h2>
             <p id="transaction-dialog-description" className="mt-1 text-sm text-[var(--yahro-muted)]">{language === "fr" ? "Notez ici une opération déjà réalisée" : "Record an operation that already happened"}</p>
@@ -496,28 +375,28 @@ function AddTransactionModal({
           </Button>
         </div>
 
-        <label className="mb-4 block text-sm font-medium text-[#55574f] dark:text-[#c0c1ba]">
+        <label className="mb-4 block text-sm font-medium text-yahro-muted">
           {t("name")}
           <input
             autoFocus
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder={language === "fr" ? "Ex. Abonnement internet" : "E.g. Internet subscription"}
-            className="mt-2 h-11 w-full rounded-xl border border-[#deded8] bg-[#fafaf7] px-3 text-[#20211d] placeholder:text-[var(--yahro-muted)] dark:border-white/10 dark:bg-[#181914] dark:text-white"
+            className="mt-2 h-11 w-full rounded-xl border border-yahro-border bg-[#fafaf7] px-3 text-yahro-text placeholder:text-[var(--yahro-muted)] dark:border-white/10 dark:bg-[#181914] dark:text-white"
           />
         </label>
 
         {accessToken && (
           <div className="mb-4 grid gap-4 sm:grid-cols-2">
-            <label className="block text-sm font-medium text-[#55574f] dark:text-[#c0c1ba]">
+            <label className="block text-sm font-medium text-yahro-muted">
               {language === "fr" ? "Compte de suivi" : "Tracking account"}
-              <select value={accountId} onChange={(event) => setAccountId(event.target.value)} disabled={loadingAccounts || accounts.length === 0} className="mt-2 h-11 w-full rounded-xl border border-[#deded8] bg-[#fafaf7] px-3 text-[#20211d] dark:border-white/10 dark:bg-[#181914] dark:text-white">
+              <select value={accountId} onChange={(event) => setAccountId(event.target.value)} disabled={loadingAccounts || accounts.length === 0} className="mt-2 h-11 w-full rounded-xl border border-yahro-border bg-[#fafaf7] px-3 text-yahro-text dark:border-white/10 dark:bg-[#181914] dark:text-white">
                 {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
               </select>
             </label>
-            <label className="block text-sm font-medium text-[#55574f] dark:text-[#c0c1ba]">
+            <label className="block text-sm font-medium text-yahro-muted">
               {language === "fr" ? "Date de l'opération" : "Operation date"}
-              <input type="date" value={transactionDate} onChange={(event) => setTransactionDate(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#deded8] bg-[#fafaf7] px-3 text-[#20211d] dark:border-white/10 dark:bg-[#181914] dark:text-white" />
+              <input type="date" value={transactionDate} onChange={(event) => setTransactionDate(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-yahro-border bg-[#fafaf7] px-3 text-yahro-text dark:border-white/10 dark:bg-[#181914] dark:text-white" />
             </label>
           </div>
         )}
@@ -528,23 +407,26 @@ function AddTransactionModal({
           </button>
         )}
 
-        <label className="mb-4 block text-sm font-medium text-[#55574f] dark:text-[#c0c1ba]">
+        <label className="mb-4 block text-sm font-medium text-yahro-muted">
           {t("amount")} - {currencyName(currency, language)}
           <div className="relative mt-2">
             <input
-              type="number"
-              min="0.01"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
+              pattern="[0-9]*[.,]?[0-9]*"
               value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              placeholder="0,00"
-              className="h-11 w-full rounded-xl border border-[#deded8] bg-[#fafaf7] px-3 text-[#20211d] placeholder:text-[var(--yahro-muted)] dark:border-white/10 dark:bg-[#181914] dark:text-white"
+              onChange={(event) => {
+                const next = event.target.value.replace(",", ".");
+                if (/^\d*(?:\.\d*)?$/.test(next)) setAmount(next);
+              }}
+              placeholder={currencyDecimals === 0 ? "0" : "0,00"}
+              className="h-11 w-full rounded-xl border border-yahro-border bg-[#fafaf7] px-3 text-yahro-text placeholder:text-[var(--yahro-muted)] dark:border-white/10 dark:bg-[#181914] dark:text-white"
             />
           </div>
         </label>
 
         <fieldset className="mb-6">
-          <legend className="mb-2 text-sm font-medium text-[#55574f] dark:text-[#c0c1ba]">{t("type")}</legend>
+          <legend className="mb-2 text-sm font-medium text-yahro-muted">{t("type")}</legend>
           <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#f1f1ed] p-1 dark:bg-[#181914]">
             {(["expense", "income"] as TransactionKind[]).map((item) => (
               <button
@@ -554,7 +436,7 @@ function AddTransactionModal({
                 className={cn(
                   "h-9 rounded-lg text-sm font-semibold transition-all",
                   kind === item
-                    ? "bg-white text-[#20211d] shadow-sm dark:bg-[#2b2c27] dark:text-white"
+                    ? "bg-white text-yahro-text shadow-sm dark:bg-[#2b2c27] dark:text-white"
                     : "text-[var(--yahro-muted)]",
                 )}
               >
@@ -568,9 +450,9 @@ function AddTransactionModal({
           <CategoryPicker key={kind} accessToken={accessToken} language={language} type={kind === "income" ? "INCOME" : "EXPENSE"} onChange={setCategorySelection} />
         </div>
 
-        <label className="mb-6 block text-sm font-medium text-[#55574f] dark:text-[#c0c1ba]">
+        <label className="mb-6 block text-sm font-medium text-yahro-muted">
           {t("paymentMethod")}
-          <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)} className="mt-2 h-11 w-full rounded-xl border border-[#deded8] bg-[#fafaf7] px-3 text-[#20211d] dark:border-white/10 dark:bg-[#181914] dark:text-white">
+          <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)} className="mt-2 h-11 w-full rounded-xl border border-yahro-border bg-[#fafaf7] px-3 text-yahro-text dark:border-white/10 dark:bg-[#181914] dark:text-white">
             {(["CASH", "BANK_TRANSFER", "BANK_CARD", "MOBILE_MONEY", "DIGITAL_WALLET", "DIRECT_DEBIT", "CHECK", "OTHER"] as PaymentMethod[]).map((method) => <option key={method} value={method}>{paymentMethodLabel(method, language)}</option>)}
           </select>
         </label>
@@ -590,66 +472,22 @@ function AddTransactionModal({
   );
 }
 
-function StatCard({
-  label,
-  value,
-  change,
-  icon,
-  positive = true,
-  delay,
-}: {
-  label: string;
-  value: string;
-  change: string;
-  icon: React.ReactNode;
-  positive?: boolean;
-  delay: string;
-}) {
-  return (
-    <article
-      className="animate-fade-up rounded-2xl border border-[#e1e1dc] bg-white p-5 shadow-[0_1px_2px_rgba(28,29,24,.02)] dark:border-white/8 dark:bg-[#20211d]"
-      style={{ animationDelay: delay }}
-    >
-      <div className="mb-5 flex items-center justify-between">
-        <span className="text-sm font-medium text-[var(--yahro-muted)] dark:text-[#a5a79f]">{label}</span>
-        <span className="grid size-8 place-items-center rounded-lg bg-[#f1f1ed] text-[#6b6d64] dark:bg-white/7 dark:text-[#b9bbb2]">
-          {icon}
-        </span>
-      </div>
-      <p className="font-[Manrope_Variable] text-[1.7rem] font-bold tracking-[-.04em] text-[#20211d] dark:text-[#f4f4ef]">{value}</p>
-      <div className="mt-2 flex items-center gap-1.5 text-xs">
-        <span
-          className={cn(
-            "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-semibold",
-            positive
-              ? "bg-[#e9f2df] text-[#527132] dark:bg-[#293820] dark:text-[#aace84]"
-              : "bg-[#f5e5e1] text-[#a25140] dark:bg-[#412925] dark:text-[#e49a89]",
-          )}
-        >
-          {positive ? <ArrowUpRight size={12} /> : <ArrowDownLeft size={12} />}
-          {change}
-        </span>
-      </div>
-    </article>
-  );
-}
-
 export default function BudgetDashboard({ initialLanguage = "fr", onLogout, profile, onProfileUpdated, accessToken, defaultCurrency = "XOF" }: { initialLanguage?: Language; onLogout?: () => void; profile: ProfileUser; onProfileUpdated?: (profile: ProfileUser) => void; accessToken?: string; defaultCurrency?: string }) {
   const [language, setLanguage] = useState<Language>(initialLanguage);
-  const [theme, setTheme] = useState<Theme>(() =>
-    typeof window !== "undefined" && window.localStorage.getItem("yahro-theme") === "dark" ? "dark" : "light",
-  );
+  const [theme, setTheme] = useState<Theme>(initialTheme);
   const [activeNav, setActiveNav] = useState<DashboardNav>("overview");
   const [appCurrency, setAppCurrency] = useState(defaultCurrency);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [transactions, setTransactions] = useState(initialTransactions);
+  const [transactions, setTransactions] = useState<Transaction[]>(accessToken ? [] : initialTransactions);
   const [dashboardData, setDashboardData] = useState<DashboardData>();
+  const [cashFlowHistory, setCashFlowHistory] = useState<DashboardData["cashflow"]>();
   const [financeCategories, setFinanceCategories] = useState<FinanceCategory[]>([]);
   const [financeRevision, setFinanceRevision] = useState(0);
   const [financeError, setFinanceError] = useState<string>();
+  const [financeLoading, setFinanceLoading] = useState(Boolean(accessToken));
   const [currentProfile, setCurrentProfile] = useState(profile);
   const [profileMenu, setProfileMenu] = useState<"sidebar" | "header" | null>(null);
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
@@ -662,15 +500,21 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
 
   const reloadFinance = React.useCallback(async () => {
     if (!accessToken) return;
+    setFinanceLoading(true);
     try {
-      const [dashboardResponse, transactionResponse, categoryResponse] = await Promise.all([
+      const now = new Date();
+      const historyFrom = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
+      const historyTo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      const [dashboardResponse, historyResponse, transactionResponse, categoryResponse] = await Promise.all([
         api.dashboard(accessToken),
+        api.dashboard(accessToken, historyFrom.toISOString(), historyTo.toISOString()),
         api.transactions(accessToken, { limit: 40 }),
         api.categories(accessToken),
       ]);
       const categories = categoryResponse.data;
       const categoryMap = new Map(categories.map((item) => [item.id, item]));
       setDashboardData(dashboardResponse);
+      setCashFlowHistory(historyResponse.cashflow);
       setFinanceCategories(categories);
       setTransactions(transactionResponse.data.map((item: FinanceTransaction) => {
         const category = item.categoryId ? categoryMap.get(item.categoryId) : undefined;
@@ -694,6 +538,8 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
       setFinanceError(undefined);
     } catch {
       setFinanceError(language === "fr" ? "Certaines données financières n'ont pas pu être chargées." : "Some financial data could not be loaded.");
+    } finally {
+      setFinanceLoading(false);
     }
   }, [accessToken, language]);
 
@@ -703,7 +549,8 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
   }, [reloadFinance, financeRevision]);
 
   const totals = useMemo(() => {
-    if (accessToken && dashboardData) {
+    if (accessToken) {
+      if (!dashboardData) return { income: 0, expenses: 0, balance: 0 };
       const total = (type: "INCOME" | "EXPENSE") => Number(dashboardData.totals.find((item) => item.currency === appCurrency && item.type === type)?.amount ?? 0);
       const balance = dashboardData.accountBalances
         .filter((item) => item.currency === appCurrency && item.includeInNetWorth)
@@ -717,14 +564,14 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
 
   const savingsRate = totals.income > 0 ? Math.max(0, ((totals.income - totals.expenses) / totals.income) * 100) : 0;
   const visibleCashFlow = useMemo(() => {
-    const source = !accessToken || !dashboardData ? cashFlowData : dashboardData.cashflow
-      .filter((item) => item.currency === appCurrency)
-      .map((item) => ({ month: new Intl.DateTimeFormat(language === "fr" ? "fr-FR" : "en-US", { day: "2-digit", month: "short" }).format(new Date(item.day)), income: Number(item.income), expenses: Number(item.expense) }));
-    return source.slice(-cashFlowPeriod);
-  }, [accessToken, appCurrency, cashFlowPeriod, dashboardData, language]);
+    if (!accessToken) return demoCashFlow.slice(-cashFlowPeriod);
+    if (!cashFlowHistory) return [];
+    return aggregateMonthlyCashFlow(cashFlowHistory, appCurrency, language, 6).slice(-cashFlowPeriod);
+  }, [accessToken, appCurrency, cashFlowHistory, cashFlowPeriod, language]);
 
   const visibleBudgets = useMemo(() => {
-    if (!accessToken || !dashboardData) return budgetCategories.map((item) => ({ id: item.label, label: language === "fr" ? item.label : item.labelEn, amount: item.amount, total: item.total, icon: undefined as string | undefined }));
+    if (!accessToken) return demoBudgetCategories.map((item) => ({ id: item.label, label: language === "fr" ? item.label : item.labelEn, amount: item.amount, total: item.total, icon: undefined as string | undefined }));
+    if (!dashboardData) return [];
     const categoryMap = new Map(financeCategories.map((item) => [item.id, item]));
     return dashboardData.budgetProgress
       .filter((item) => item.currency === appCurrency)
@@ -747,17 +594,17 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
   const toggleTheme = () => {
     setTheme((current) => {
       const next = current === "light" ? "dark" : "light";
-      document.documentElement.classList.toggle("dark", next === "dark");
-      window.localStorage.setItem("yahro-theme", next);
-      document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next === "dark" ? "#171813" : "#f5f5f1");
+      applyTheme(next, true);
       return next;
     });
   };
 
   React.useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    applyTheme(theme);
     document.documentElement.lang = language;
   }, [theme, language]);
+
+  React.useEffect(() => subscribeToSystemTheme(setTheme), []);
 
   const addTransaction = (transaction: Transaction) => {
     setTransactions((current) => [transaction, ...current]);
@@ -771,7 +618,8 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
   };
 
   return (
-    <div data-session={accessToken ? "authenticated" : "demo"} className="min-h-screen bg-[#f5f5f1] text-[#20211d] transition-colors dark:bg-[#171813] dark:text-[#efefe9]">
+    <div data-session={accessToken ? "authenticated" : "demo"} className="min-h-screen bg-[#f5f5f1] text-yahro-text transition-colors dark:bg-[#171813] dark:text-[#efefe9]">
+      <a href="#yahro-main-content" className="yahro-skip-link">{language === "fr" ? "Aller au contenu" : "Skip to content"}</a>
       <aside className="fixed inset-y-0 left-0 z-50 hidden w-[250px] flex-col overflow-y-auto overscroll-contain border-r border-[#e2e2dc] bg-[#fafaf7] px-4 py-5 dark:border-white/8 dark:bg-[#1b1c17] lg:flex">
         <div className="flex items-center gap-3 px-2">
           <BrandMark />
@@ -787,7 +635,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
               type="button"
               onClick={() => selectNav(key)}
               className={cn(
-                "flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium transition-all",
+                "flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium transition-all",
                 activeNav === key
                   ? "bg-[#e8f1da] text-[#3f5726] dark:bg-[#293620] dark:text-[#c5dfa3]"
                   : "text-[#6f7169] hover:bg-[#efefeb] hover:text-[#262721] dark:text-[#a3a59c] dark:hover:bg-white/6 dark:hover:text-white",
@@ -806,7 +654,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
       </aside>
 
       <div className="lg:pl-[250px]">
-        <header className="sticky top-0 z-40 flex min-h-[70px] items-center border-b border-[#e2e2dc]/90 bg-[#f5f5f1]/90 px-4 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur-xl dark:border-white/8 dark:bg-[#171813]/90 sm:px-7 lg:px-9">
+        <header className="yahro-app-header sticky top-0 z-40 flex min-h-[70px] items-center border-b border-[#e2e2dc]/90 bg-[#f5f5f1]/90 px-4 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur-xl dark:border-white/8 dark:bg-[#171813]/90 sm:px-7 lg:px-9">
           <div className="flex items-center gap-2 lg:hidden">
             <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu"><Menu size={20} /></Button>
             <BrandMark />
@@ -871,12 +719,12 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
           </div>
         </header>
 
-        <main className="mx-auto max-w-[1500px] px-4 pb-28 pt-7 sm:px-7 lg:px-9 lg:pb-10 lg:pt-9">
+        <main id="yahro-main-content" tabIndex={-1} className="mx-auto max-w-[1500px] px-4 pb-28 pt-7 sm:px-7 lg:px-9 lg:pb-10 lg:pt-9">
           <section className={cn("mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end", activeNav !== "overview" && "hidden")}>
             <div className="animate-fade-up">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[.13em] text-[#7c9a51] dark:text-[#9cbc73]">{t("overview")}</p>
-              <h1 className="font-[Manrope_Variable] text-2xl font-extrabold tracking-[-.04em] text-[#20211d] dark:text-[#f4f4ef] sm:text-3xl">{t("greeting")}{nickname ? `, ${nickname}` : ""}</h1>
-              <p className="mt-2 text-sm text-[var(--yahro-muted)] dark:text-[#a4a69d]">{t("subtitle")}</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[.13em] text-[var(--yahro-accent-text)] dark:text-[#9cbc73]">{t("overview")}</p>
+              <h1 className="font-[Manrope_Variable] text-2xl font-extrabold tracking-[-.04em] text-yahro-text dark:text-[#f4f4ef] sm:text-3xl">{t("greeting")}{nickname ? `, ${nickname}` : ""}</h1>
+              <p className="mt-2 text-sm text-yahro-muted">{t("subtitle")}</p>
             </div>
             <Button onClick={() => setAddOpen(true)} className="w-full sm:w-auto">
               <Plus size={17} /> {t("addTransaction")}
@@ -904,11 +752,12 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
 
           {activeNav === "transactions" && accessToken && <TransactionsDashboard accessToken={accessToken} language={language} onAdd={() => setAddOpen(true)} revision={financeRevision} />}
 
-          {activeNav === "analytics" && accessToken && <AnalyticsDashboard dashboard={dashboardData} categories={financeCategories} language={language} currency={appCurrency} />}
+          {activeNav === "analytics" && accessToken && <AnalyticsDashboard dashboard={dashboardData} categories={financeCategories} language={language} currency={appCurrency} loading={financeLoading} />}
 
-          {financeError && activeNav === "overview" && <p className="mb-4 rounded-xl bg-[#f7e9e5] px-4 py-3 text-xs text-[#a05240] dark:bg-[#3b2723] dark:text-[#e9a191]">{financeError}</p>}
+          {financeError && activeNav === "overview" && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e8cdc6] bg-[#fbeeea] px-4 py-3 dark:border-[#5a3a33] dark:bg-[#2e1f1b]"><p className="text-sm text-[#8f4634] dark:text-[#e9a695]">{financeError}</p><button type="button" onClick={() => void reloadFinance()} className="min-h-11 rounded-lg border border-[#d9b3aa] px-3 text-sm font-bold text-[#8f4634] hover:bg-[#f5ded8] dark:border-[#6d453c] dark:text-[#e9a695]">{language === "fr" ? "Réessayer" : "Retry"}</button></div>}
 
           <section className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4", activeNav !== "overview" && "hidden")}>
+            {financeLoading && !dashboardData ? <><StatSkeleton /><StatSkeleton /><StatSkeleton /><StatSkeleton /></> : <>
             <article className="animate-fade-up overflow-hidden rounded-2xl bg-[#20211d] p-5 text-white shadow-[0_12px_30px_rgba(29,30,25,.12)] dark:bg-[#dcebc5] dark:text-[#202b13]">
               <div className="mb-5 flex items-center justify-between">
                 <span className="text-sm font-medium text-white/65 dark:text-[#53623e]">{t("totalBalance")}</span>
@@ -916,26 +765,27 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
                   {balanceVisible ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
               </div>
-              <p className="font-[Manrope_Variable] text-[1.7rem] font-bold tracking-[-.04em]">
-                {balanceVisible ? formatCurrency(totals.balance, language, appCurrency) : "********"}
+              <p className="yahro-money font-[Manrope_Variable] text-[1.7rem] font-bold">
+                {balanceVisible ? formatCurrencyAmount(totals.balance, appCurrency, language) : "********"}
               </p>
               <div className="mt-2 flex items-center gap-1.5 text-xs">
                 <span className="inline-flex items-center gap-0.5 rounded-md bg-white/10 px-1.5 py-0.5 font-semibold text-[#d9efb9] dark:bg-[#40512e] dark:text-[#e4f4cd]"><WalletCards size={12} /> {accessToken ? dashboardData?.accountBalances.length ?? 0 : "8,2%"}</span>
                 <span className="text-white/45 dark:text-[#647250]">{accessToken ? (language === "fr" ? "comptes suivis" : "tracked accounts") : t("compared")}</span>
               </div>
             </article>
-            <StatCard label={t("monthlyIncome")} value={formatCurrency(totals.income, language, appCurrency)} change={changeLabel(incomeChange)} positive={incomeChange >= 0} icon={<ArrowDownLeft size={17} />} delay=".05s" />
-            <StatCard label={t("monthlySpending")} value={formatCurrency(totals.expenses, language, appCurrency)} change={changeLabel(expenseChange)} positive={expenseChange <= 0} icon={<ArrowUpRight size={17} />} delay=".1s" />
-            <StatCard label={t("savingsRate")} value={`${savingsRate.toLocaleString(language === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 1 })}%`} change={changeLabel(savingsChange)} positive={savingsChange >= 0} icon={<CircleDollarSign size={17} />} delay=".15s" />
+            <StatCard language={language} label={t("monthlyIncome")} value={formatCurrencyAmount(totals.income, appCurrency, language)} change={changeLabel(incomeChange)} positive={incomeChange >= 0} rising={incomeChange >= 0} icon={<ArrowDownLeft size={17} />} delay=".05s" />
+            <StatCard language={language} label={t("monthlySpending")} value={formatCurrencyAmount(totals.expenses, appCurrency, language)} change={changeLabel(expenseChange)} positive={expenseChange <= 0} rising={expenseChange >= 0} icon={<ArrowUpRight size={17} />} delay=".1s" />
+            <StatCard language={language} label={t("savingsRate")} value={`${savingsRate.toLocaleString(language === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 1 })}%`} change={changeLabel(savingsChange)} positive={savingsChange >= 0} rising={savingsChange >= 0} icon={<CircleDollarSign size={17} />} delay=".15s" />
+            </>}
           </section>
 
           <section className={cn("mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,.75fr)]", activeNav !== "overview" && "hidden")}>
-            <article className="min-w-0 rounded-2xl border border-[#e1e1dc] bg-white p-5 dark:border-white/8 dark:bg-[#20211d] sm:p-6">
+            <article className="min-w-0 rounded-2xl border border-yahro-border bg-white p-5 dark:border-white/8 dark:bg-[#20211d] sm:p-6">
               <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="font-[Manrope_Variable] font-bold tracking-[-.02em]">{t("cashFlow")}</h2>
                   <div className="mt-2 flex items-center gap-4 text-xs text-[var(--yahro-muted)]">
-                    <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#769450]" />{t("income")}</span>
+                    <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-yahro-accent" />{t("income")}</span>
                     <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#b8b9b3] dark:bg-[#777a70]" />{t("expenses")}</span>
                   </div>
                 </div>
@@ -947,11 +797,11 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
                 </div>
               </div>
               <div className="h-[260px] w-full sm:h-[290px]">
-                {activeNav === "overview" && <React.Suspense fallback={<div className="h-full animate-pulse rounded-xl bg-black/[.035] dark:bg-white/[.04]" aria-label={language === "fr" ? "Chargement du graphique" : "Loading chart"} />}><CashFlowChart data={visibleCashFlow} formatValue={(value) => formatCurrency(value, language, appCurrency)} /></React.Suspense>}
+                {financeLoading && !dashboardData ? <div className="h-full animate-pulse rounded-xl bg-black/[.035] dark:bg-white/[.04]" aria-label={language === "fr" ? "Chargement du graphique" : "Loading chart"} /> : activeNav === "overview" && <React.Suspense fallback={<div className="h-full animate-pulse rounded-xl bg-black/[.035] dark:bg-white/[.04]" aria-label={language === "fr" ? "Chargement du graphique" : "Loading chart"} />}><CashFlowChart data={visibleCashFlow} formatValue={(value) => formatCurrencyAmount(value, appCurrency, language)} label={language === "fr" ? `Flux de trésorerie des ${cashFlowPeriod} derniers mois` : `Cash flow for the last ${cashFlowPeriod} months`} /></React.Suspense>}
               </div>
             </article>
 
-            <article className="rounded-2xl border border-[#e1e1dc] bg-white p-5 dark:border-white/8 dark:bg-[#20211d] sm:p-6">
+            <article className="rounded-2xl border border-yahro-border bg-white p-5 dark:border-white/8 dark:bg-[#20211d] sm:p-6">
               <div className="mb-5 flex items-center justify-between">
                 <div>
                   <h2 className="font-[Manrope_Variable] font-bold tracking-[-.02em]">{t("budget")}</h2>
@@ -960,13 +810,13 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
                 <span className="grid size-9 place-items-center rounded-xl bg-[#eef4e5] text-[#668642] dark:bg-[#2a3822] dark:text-[#a9cc83]"><Target size={18} /></span>
               </div>
 
-              <div className="mb-6 rounded-2xl bg-[#f4f5ef] p-4 dark:bg-[#191a16]">
+              {financeLoading && !dashboardData ? <div className="mb-6 h-32 animate-pulse rounded-2xl bg-[#f4f5ef] dark:bg-[#191a16]" aria-label={language === "fr" ? "Chargement des budgets" : "Loading budgets"} /> : <><div className="mb-6 rounded-2xl bg-[#f4f5ef] p-4 dark:bg-[#191a16]">
                 <div className="flex items-end justify-between">
-                  <div><span className="font-[Manrope_Variable] text-2xl font-extrabold">{formatCurrency(budgetSpent, language, appCurrency)}</span><span className="text-sm text-[var(--yahro-muted)]"> / {formatCurrency(budgetTotal, language, appCurrency)}</span></div>
+                  <div className="yahro-money"><span className="font-[Manrope_Variable] text-2xl font-extrabold">{formatCurrencyAmount(budgetSpent, appCurrency, language)}</span><span className="text-sm text-[var(--yahro-muted)]"> / {formatCurrencyAmount(budgetTotal, appCurrency, language)}</span></div>
                   <span className="text-xs font-bold text-[#6d8b48]">{budgetTotal > 0 ? Math.round((budgetSpent / budgetTotal) * 100) : 0}%</span>
                 </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#dedfd8] dark:bg-white/10"><div className="h-full rounded-full bg-[#769450]" style={{ width: `${budgetTotal > 0 ? Math.min(100, (budgetSpent / budgetTotal) * 100) : 0}%` }} /></div>
-                <p className="mt-2 text-[11px] text-[var(--yahro-muted)]">{formatCurrency(Math.max(0, budgetTotal - budgetSpent), language, appCurrency)} {t("remaining")}</p>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#dedfd8] dark:bg-white/10"><div className="h-full rounded-full bg-yahro-accent" style={{ width: `${budgetTotal > 0 ? Math.min(100, (budgetSpent / budgetTotal) * 100) : 0}%` }} /></div>
+                <p className="yahro-money mt-2 text-[11px] text-[var(--yahro-muted)]">{formatCurrencyAmount(Math.max(0, budgetTotal - budgetSpent), appCurrency, language)} {t("remaining")}</p>
               </div>
 
               <div className="space-y-4">
@@ -976,25 +826,26 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
                     <div key={category.id}>
                       <div className="mb-1.5 flex items-center justify-between text-xs">
                         <span className="flex items-center gap-2 font-medium text-[#55574f] dark:text-[#c5c7bf]">{category.icon && <CategoryIcon name={category.icon} size={14} />}{category.label}</span>
-                        <span className="text-[var(--yahro-muted)]">{formatCurrency(category.amount, language, appCurrency)} / {formatCurrency(category.total, language, appCurrency)}</span>
+                        <span className="yahro-money text-[var(--yahro-muted)]">{formatCurrencyAmount(category.amount, appCurrency, language)} / {formatCurrencyAmount(category.total, appCurrency, language)}</span>
                       </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-[#ededE8] dark:bg-white/8"><div className="h-full rounded-full bg-[#769450]" style={{ width: `${Math.min(100, percentage)}%` }} /></div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-[#ededE8] dark:bg-white/8"><div className="h-full rounded-full bg-yahro-accent" style={{ width: `${Math.min(100, percentage)}%` }} /></div>
                     </div>
                   );
                 })}
               </div>
+              </>}
               <Button variant="ghost" className="mt-5 w-full text-[#668642] dark:text-[#b4d38e]" onClick={() => setActiveNav("budgets")}>{t("viewBudgets")} <ArrowRight size={15} /></Button>
             </article>
           </section>
 
           <section className={cn("mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,.75fr)]", activeNav !== "overview" && "hidden")}>
-            <article className="overflow-hidden rounded-2xl border border-[#e1e1dc] bg-white dark:border-white/8 dark:bg-[#20211d]">
+            <article className="overflow-hidden rounded-2xl border border-yahro-border bg-white dark:border-white/8 dark:bg-[#20211d]">
               <div className="flex items-center justify-between border-b border-[#e8e8e3] px-5 py-4 dark:border-white/7 sm:px-6">
                 <h2 className="font-[Manrope_Variable] font-bold tracking-[-.02em]">{t("recent")}</h2>
-                <button type="button" onClick={() => setActiveNav("transactions")} className="flex items-center gap-1 text-xs font-semibold text-[#6d8b48] dark:text-[#afd087]">{t("viewAll")} <ChevronRight size={14} /></button>
+                <button type="button" onClick={() => setActiveNav("transactions")} className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-[var(--yahro-accent-text)]">{t("viewAll")} <ChevronRight size={14} /></button>
               </div>
               <div className="divide-y divide-[#eeeeea] dark:divide-white/6">
-                {transactions.slice(0, 5).map((transaction) => (
+                {financeLoading && transactions.length === 0 ? <div className="h-56 animate-pulse bg-black/[.025] dark:bg-white/[.035]" aria-label={language === "fr" ? "Chargement des opérations" : "Loading operations"} /> : transactions.length === 0 ? <p className="px-5 py-12 text-center text-sm text-[var(--yahro-muted)]">{language === "fr" ? "Aucune opération notée pour le moment." : "No recorded operation yet."}</p> : transactions.slice(0, 5).map((transaction) => (
                   <div key={transaction.id} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-[#fafaf7] dark:hover:bg-white/[.025] sm:px-6">
                     <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", transaction.iconStyle)}>{transaction.icon}</span>
                     <div className="min-w-0 flex-1">
@@ -1002,7 +853,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
                       <p className="mt-0.5 text-[11px] text-[var(--yahro-muted)]">{language === "fr" ? transaction.category : transaction.categoryEn} - {formatTransactionDate(transaction.date, language, t)} - {paymentMethodLabel(transaction.paymentMethod, language)}</p>
                     </div>
                     <div className="text-right">
-                      <p className={cn("text-sm font-bold", transaction.kind === "income" ? "text-[#638340] dark:text-[#a7ca7e]" : "text-[#33342e] dark:text-[#e4e4df]")}>{transaction.kind === "income" ? "+" : "-"}{formatCurrency(transaction.amount, language, appCurrency)}</p>
+                      <p className={cn("yahro-money text-sm font-bold", transaction.kind === "income" ? "text-[#638340] dark:text-[#a7ca7e]" : "text-[#33342e] dark:text-[#e4e4df]")}>{transaction.kind === "income" ? "+" : "-"}{formatCurrencyAmount(transaction.amount, appCurrency, language)}</p>
                       <p className="mt-0.5 text-[10px] text-[var(--yahro-muted)]">{transaction.kind === "income" ? t("incomeSingle") : t("expense")}</p>
                     </div>
                   </div>
@@ -1010,7 +861,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
               </div>
             </article>
 
-            <article className="rounded-2xl border border-[#e1e1dc] bg-white p-5 dark:border-white/8 dark:bg-[#20211d] sm:p-6">
+            <article className="rounded-2xl border border-yahro-border bg-white p-5 dark:border-white/8 dark:bg-[#20211d] sm:p-6">
               <h2 className="font-[Manrope_Variable] font-bold tracking-[-.02em]">{t("quickActions")}</h2>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 {[
@@ -1038,7 +889,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
 
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm lg:hidden" onMouseDown={(event) => event.currentTarget === event.target && setMobileMenuOpen(false)}>
-          <aside className="animate-soft-pop flex h-[100dvh] w-[min(300px,88vw)] flex-col overflow-y-auto overscroll-contain border-r border-[#e1e1dc] bg-[#fafaf7] px-5 pb-0 pt-[calc(1.25rem+env(safe-area-inset-top))] shadow-2xl dark:border-white/10 dark:bg-[#1b1c17]">
+          <aside className="animate-soft-pop flex h-[100dvh] w-[min(300px,88vw)] flex-col overflow-y-auto overscroll-contain border-r border-yahro-border bg-[#fafaf7] px-5 pb-0 pt-[calc(1.25rem+env(safe-area-inset-top))] shadow-2xl dark:border-white/10 dark:bg-[#1b1c17]">
             <div className="mb-6 flex shrink-0 items-center justify-between">
               <div className="flex items-center gap-3"><BrandMark /><span className="font-[Manrope_Variable] text-lg font-extrabold tracking-[-.04em]">yahro</span></div>
               <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu"><X size={20} /></Button>
@@ -1055,11 +906,11 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
         </div>
       )}
 
-      <nav className="fixed inset-x-3 z-50 flex min-h-16 items-center justify-around rounded-2xl border border-[#deded8] bg-white/95 px-2 shadow-[0_12px_35px_rgba(35,36,30,.14)] backdrop-blur-xl dark:border-white/10 dark:bg-[#20211d]/95 lg:hidden" style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }} aria-label={language === "fr" ? "Navigation mobile" : "Mobile navigation"}>
+      <nav className="fixed inset-x-3 z-50 flex min-h-16 items-center justify-around rounded-2xl border border-yahro-border bg-white px-2 shadow-[0_12px_35px_rgba(35,36,30,.14)] dark:border-white/10 dark:bg-[#20211d] lg:hidden" style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }} aria-label={language === "fr" ? "Navigation mobile" : "Mobile navigation"}>
         {navItems.slice(0, 4).map(({ key, icon: Icon }) => (
           <button key={key} type="button" onClick={() => selectNav(key)} className={cn("flex h-12 min-w-14 flex-col items-center justify-center gap-1 text-[10px] font-semibold", activeNav === key ? "text-[#597638] dark:text-[#b8d793]" : "text-[var(--yahro-muted)]")}>
             <Icon size={19} strokeWidth={activeNav === key ? 2.5 : 2} />
-            {t(key)}
+            <span>{t(key)}</span>
           </button>
         ))}
         <button type="button" onClick={() => setAddOpen(true)} className="grid size-12 place-items-center rounded-xl bg-[#20211d] text-white shadow-md dark:bg-[#dcebc5] dark:text-[#202b13]" aria-label={t("addTransaction")}><Plus size={20} /></button>

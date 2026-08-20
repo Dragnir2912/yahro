@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
@@ -611,6 +611,22 @@ export async function registerFinanceRoutes(app: FastifyInstance, dependencies: 
     return reply.code(204).send();
   });
 
+  app.post("/api/transactions/:id/restore", async (request) => {
+    const auth = await authenticate(request);
+    requireRole(auth.role, "MEMBER");
+    const id = resourceId(request);
+    return database.withSecurityContext(auth, async (transaction) => {
+      const [restored] = await transaction
+        .update(transactions)
+        .set({ deletedAt: null, version: sql`${transactions.version} + 1` })
+        .where(and(eq(transactions.id, id), eq(transactions.tenantId, auth.tenantId), isNotNull(transactions.deletedAt)))
+        .returning();
+      if (!restored) throw notFound();
+      await transaction.insert(auditLogs).values(auditValues(request, auth, "TRANSACTION_RESTORED", "transaction", id));
+      return { data: restored };
+    });
+  });
+
   app.get("/api/budgets", async (request) => {
     const auth = await authenticate(request);
     const period = parseBody(z.object({ from: z.coerce.date(), to: z.coerce.date() }).strict(), request.query);
@@ -618,7 +634,7 @@ export async function registerFinanceRoutes(app: FastifyInstance, dependencies: 
       data: await transaction
         .select()
         .from(budgets)
-        .where(and(eq(budgets.tenantId, auth.tenantId), lt(budgets.periodStart, period.to), gt(budgets.periodEnd, period.from)))
+        .where(and(eq(budgets.tenantId, auth.tenantId), isNull(budgets.archivedAt), lt(budgets.periodStart, period.to), gt(budgets.periodEnd, period.from)))
         .orderBy(budgets.periodStart),
     }));
   });
@@ -656,7 +672,7 @@ export async function registerFinanceRoutes(app: FastifyInstance, dependencies: 
       const [updated] = await transaction
         .update(budgets)
         .set({ ...changes, version: sql`${budgets.version} + 1` })
-        .where(and(eq(budgets.id, id), eq(budgets.tenantId, auth.tenantId), eq(budgets.version, version)))
+        .where(and(eq(budgets.id, id), eq(budgets.tenantId, auth.tenantId), eq(budgets.version, version), isNull(budgets.archivedAt)))
         .returning();
       if (!updated) throw conflict("STALE_OR_MISSING_BUDGET");
       await transaction.insert(auditLogs).values(auditValues(request, auth, "BUDGET_UPDATED", "budget", id));
@@ -670,11 +686,12 @@ export async function registerFinanceRoutes(app: FastifyInstance, dependencies: 
     const id = resourceId(request);
     await database.withSecurityContext(auth, async (transaction) => {
       const [removed] = await transaction
-        .delete(budgets)
-        .where(and(eq(budgets.id, id), eq(budgets.tenantId, auth.tenantId)))
+        .update(budgets)
+        .set({ archivedAt: new Date(), version: sql`${budgets.version} + 1` })
+        .where(and(eq(budgets.id, id), eq(budgets.tenantId, auth.tenantId), isNull(budgets.archivedAt)))
         .returning({ id: budgets.id });
       if (!removed) throw notFound();
-      await transaction.insert(auditLogs).values(auditValues(request, auth, "BUDGET_DELETED", "budget", id));
+      await transaction.insert(auditLogs).values(auditValues(request, auth, "BUDGET_ARCHIVED", "budget", id));
     });
     return reply.code(204).send();
   });

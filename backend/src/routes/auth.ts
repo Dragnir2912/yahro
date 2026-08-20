@@ -141,6 +141,7 @@ interface RefreshLookup {
   tokenHash: string;
   expiresAt: Date;
   revokedAt: Date | null;
+  revokeReason: string | null;
   issuedSessionVersion: number;
   currentSessionVersion: number;
   authenticatedAt: Date;
@@ -711,6 +712,11 @@ export async function registerAuthRoutes(app: FastifyInstance, dependencies: Aut
     if (!safeEqual(session.tokenHash, suppliedHash)) throw unauthorized();
 
     if (session.revokedAt) {
+      const rotatedWithinGrace = session.revokeReason === "ROTATED"
+        && Date.now() - session.revokedAt.getTime() <= config.refreshReuseGraceSeconds * 1000;
+      if (rotatedWithinGrace) {
+        throw new AppError(409, "REFRESH_RETRY", "A concurrent refresh completed. Retry with the current cookie.");
+      }
       await database.withSecurityContext({ userId: session.userId, tenantId: session.tenantId }, async (transaction) => {
         await transaction
           .update(refreshSessions)

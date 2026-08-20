@@ -87,7 +87,7 @@ export default function LegalPage({ kind, onHome }: LegalPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f7f3] text-[#20211d] transition-colors dark:bg-[#080a07] dark:text-[#f1f2ec]">
+    <div className="min-h-screen bg-[#f7f7f3] text-yahro-text transition-colors dark:bg-[#080a07] dark:text-[#f1f2ec]">
       <header className="border-b border-black/7 bg-[#f7f7f3]/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl dark:border-white/8 dark:bg-[#080a07]/90">
         <div className="mx-auto flex h-[72px] max-w-5xl items-center px-5 sm:px-8">
           <button type="button" onClick={onHome} className="flex items-center gap-2.5 rounded-xl" aria-label={t.home}>

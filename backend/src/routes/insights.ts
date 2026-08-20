@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, isNull, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
@@ -157,7 +157,16 @@ export async function registerInsightRoutes(app: FastifyInstance, dependencies: 
         .leftJoin(
           transactions,
           and(
-            eq(transactions.categoryId, budgets.categoryId),
+            or(
+              eq(transactions.categoryId, budgets.categoryId),
+              sql`${transactions.categoryId} in (
+                select child.id
+                from public.categories child
+                where child.parent_id = ${budgets.categoryId}
+                  and child.tenant_id = ${auth.tenantId}::uuid
+                  and child.archived_at is null
+              )`,
+            ),
             eq(transactions.tenantId, auth.tenantId),
             eq(transactions.type, "EXPENSE"),
             isNull(transactions.deletedAt),
@@ -168,6 +177,7 @@ export async function registerInsightRoutes(app: FastifyInstance, dependencies: 
         .where(
           and(
             eq(budgets.tenantId, auth.tenantId),
+            isNull(budgets.archivedAt),
             lte(budgets.periodStart, range.to),
             gte(budgets.periodEnd, range.from),
           ),

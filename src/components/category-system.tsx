@@ -20,6 +20,8 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CategoryIcon, IconPicker, systemCategoryIconByKey } from "@/lib/category-icons";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
+import AsyncErrorState from "@/components/ui/async-error-state";
 
 type Language = "fr" | "en";
 
@@ -213,33 +215,42 @@ function errorMessage(error: unknown, language: Language) {
 }
 
 function useCategoryData(accessToken?: string) {
-  const [categories, setCategories] = useState<FinanceCategory[]>(demoCategories);
-  const [details, setDetails] = useState<PersonalCategoryDetail[]>(demoDetails);
+  const [categories, setCategories] = useState<FinanceCategory[]>(() => accessToken ? [] : demoCategories);
+  const [details, setDetails] = useState<PersonalCategoryDetail[]>(() => accessToken ? [] : demoDetails);
   const [loading, setLoading] = useState(Boolean(accessToken));
   const [error, setError] = useState<string>();
+  const [retryRevision, setRetryRevision] = useState(0);
 
   useEffect(() => {
     if (!accessToken) return;
     let cancelled = false;
-    void Promise.all([api.categories(accessToken), api.categoryDetails(accessToken)])
-      .then(([categoryResponse, detailResponse]) => {
-        if (cancelled) return;
-        setCategories(categoryResponse.data);
-        setDetails(detailResponse.data);
-        setError(undefined);
-      })
-      .catch((cause: unknown) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "REQUEST_ERROR");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    const timeout = window.setTimeout(() => {
+      setLoading(true);
+      setError(undefined);
+      void Promise.all([api.categories(accessToken), api.categoryDetails(accessToken)])
+        .then(([categoryResponse, detailResponse]) => {
+          if (cancelled) return;
+          setCategories(categoryResponse.data);
+          setDetails(detailResponse.data);
+        })
+        .catch((cause: unknown) => {
+          if (!cancelled) {
+            setCategories([]);
+            setDetails([]);
+            setError(cause instanceof Error ? cause.message : "REQUEST_ERROR");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
     };
-  }, [accessToken]);
+  }, [accessToken, retryRevision]);
 
-  return { categories, setCategories, details, setDetails, loading, error };
+  return { categories, setCategories, details, setDetails, loading, error, retry: () => setRetryRevision((current) => current + 1) };
 }
 
 export function CategoryPicker({
@@ -253,7 +264,7 @@ export function CategoryPicker({
   type: CategoryType;
   onChange: (selection: CategorySelection | null) => void;
 }) {
-  const { categories, details, setDetails, loading } = useCategoryData(accessToken);
+  const { categories, details, setDetails, loading, error, retry } = useCategoryData(accessToken);
   const [familyId, setFamilyId] = useState("");
   const [postId, setPostId] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -304,6 +315,7 @@ export function CategoryPicker({
 
   return (
     <fieldset className="space-y-4">
+      {error && <AsyncErrorState message={language === "fr" ? "Impossible de charger les catégories." : "Unable to load categories."} retryLabel={language === "fr" ? "Réessayer" : "Retry"} onRetry={retry} />}
       <legend className="text-sm font-semibold text-[#454740] dark:text-[#d7d8d1]">
         {language === "fr" ? "Classement" : "Classification"}
       </legend>
@@ -345,7 +357,7 @@ export function CategoryPicker({
       )}
 
       {selectedFamily && (
-        <label className="block text-sm font-medium text-[#55574f] dark:text-[#c0c1ba]">
+        <label className="block text-sm font-medium text-yahro-muted">
           {language === "fr" ? "Poste conseillé" : "Suggested post"}
           <select
             value={postId}
@@ -354,7 +366,7 @@ export function CategoryPicker({
               setDetailId("");
               setDetailText("");
             }}
-            className="mt-2 h-11 w-full rounded-xl border border-[#deded8] bg-[#fafaf7] px-3 text-[#20211d] dark:border-white/10 dark:bg-[#181914] dark:text-white"
+            className="mt-2 h-11 w-full rounded-xl border border-yahro-border bg-[#fafaf7] px-3 text-yahro-text dark:border-white/10 dark:bg-[#181914] dark:text-white"
           >
             <option value="">{language === "fr" ? "Famille seule" : "Family only"}</option>
             {posts.map((post) => <option key={post.id} value={post.id}>{categoryName(post, language)}</option>)}
@@ -384,7 +396,7 @@ export function CategoryPicker({
                     setDetailId(detailOptions.find((detail) => detail.name.toLocaleLowerCase() === value.trim().toLocaleLowerCase())?.id ?? "");
                   }}
                   placeholder={language === "fr" ? "Ex. Déjeuner au travail" : "E.g. Lunch at work"}
-                  className="h-10 min-w-0 flex-1 rounded-lg border border-[#deded8] bg-white px-3 text-sm dark:border-white/10 dark:bg-[#181914]"
+                  className="h-10 min-w-0 flex-1 rounded-lg border border-yahro-border bg-white px-3 text-sm dark:border-white/10 dark:bg-[#181914]"
                 />
                 <datalist id={`details-${postId}`}>
                   {detailOptions.map((detail) => <option key={detail.id} value={detail.name} />)}
@@ -408,7 +420,7 @@ export function CategoryPicker({
 }
 
 export default function CategoryManager({ accessToken, language }: { accessToken?: string; language: Language }) {
-  const { categories, setCategories, details, setDetails, loading, error } = useCategoryData(accessToken);
+  const { categories, setCategories, details, setDetails, loading, error, retry } = useCategoryData(accessToken);
   const [type, setType] = useState<CategoryType>("EXPENSE");
   const [familyId, setFamilyId] = useState("");
   const [postId, setPostId] = useState("");
@@ -418,6 +430,7 @@ export default function CategoryManager({ accessToken, language }: { accessToken
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string>();
+  const [archiveTarget, setArchiveTarget] = useState<{ kind: "post"; item: FinanceCategory } | { kind: "detail"; item: PersonalCategoryDetail }>();
 
   const families = useMemo(() => categories.filter((item) => item.type === type && item.level === 1), [categories, type]);
   const selectedFamily = families.find((item) => item.id === familyId) ?? families[0];
@@ -502,9 +515,9 @@ export default function CategoryManager({ accessToken, language }: { accessToken
     <section className="animate-fade-up space-y-5">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[.13em] text-[#7c9a51] dark:text-[#9cbc73]">{language === "fr" ? "Organisation" : "Organisation"}</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[.13em] text-[var(--yahro-accent-text)] dark:text-[#9cbc73]">{language === "fr" ? "Organisation" : "Organisation"}</p>
           <h1 className="font-[Manrope_Variable] text-2xl font-extrabold tracking-[-.04em] sm:text-3xl">{language === "fr" ? "Postes et catégories" : "Posts and categories"}</h1>
-          <p className="mt-2 max-w-2xl text-sm text-[var(--yahro-muted)] dark:text-[#a4a69d]">{language === "fr" ? "Une ossature stable pour les analyses, avec vos précisions personnelles lorsque vous en avez besoin." : "A stable structure for reporting, with personal details whenever you need them."}</p>
+          <p className="mt-2 max-w-2xl text-sm text-yahro-muted">{language === "fr" ? "Une ossature stable pour les analyses, avec vos précisions personnelles lorsque vous en avez besoin." : "A stable structure for reporting, with personal details whenever you need them."}</p>
         </div>
         <div className="inline-flex rounded-xl bg-[#e9e9e4] p-1 dark:bg-white/7">
           {(["EXPENSE", "INCOME"] as CategoryType[]).map((value) => (
@@ -513,15 +526,17 @@ export default function CategoryManager({ accessToken, language }: { accessToken
         </div>
       </div>
 
+      {error && <AsyncErrorState message={language === "fr" ? "Impossible de charger vos catégories." : "Unable to load your categories."} retryLabel={language === "fr" ? "Réessayer" : "Retry"} onRetry={retry} />}
+
       <div className="grid gap-3 sm:grid-cols-3">
         {[
           { icon: FolderTree, value: families.length, label: language === "fr" ? "Familles stables" : "Stable families" },
           { icon: Layers3, value: categories.filter((item) => item.type === type && item.level === 2).length, label: language === "fr" ? "Postes disponibles" : "Available posts" },
           { icon: Tag, value: details.length, label: language === "fr" ? "Détails privés" : "Private details" },
-        ].map(({ icon: Icon, value, label }) => <article key={label} className="rounded-2xl border border-[#e1e1dc] bg-white p-4 dark:border-white/8 dark:bg-[#20211d]"><span className="grid size-9 place-items-center rounded-xl bg-[#edf4e3] text-[#668642] dark:bg-[#2a3822] dark:text-[#b6d68e]"><Icon size={17} /></span><p className="mt-4 font-[Manrope_Variable] text-2xl font-extrabold">{value}</p><p className="mt-1 text-xs text-[var(--yahro-muted)]">{label}</p></article>)}
+        ].map(({ icon: Icon, value, label }) => <article key={label} className="rounded-2xl border border-yahro-border bg-white p-4 dark:border-white/8 dark:bg-[#20211d]"><span className="grid size-9 place-items-center rounded-xl bg-[#edf4e3] text-[#668642] dark:bg-[#2a3822] dark:text-[#b6d68e]"><Icon size={17} /></span><p className="mt-4 font-[Manrope_Variable] text-2xl font-extrabold">{value}</p><p className="mt-1 text-xs text-[var(--yahro-muted)]">{label}</p></article>)}
       </div>
 
-      <div className="grid min-h-[540px] overflow-hidden rounded-2xl border border-[#e1e1dc] bg-white dark:border-white/8 dark:bg-[#20211d] lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="grid min-h-[540px] overflow-hidden rounded-2xl border border-yahro-border bg-white dark:border-white/8 dark:bg-[#20211d] lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="border-b border-[#e7e7e1] p-4 dark:border-white/8 lg:border-b-0 lg:border-r">
           <p className="px-2 text-xs font-bold uppercase tracking-[.12em] text-[var(--yahro-muted)]">{language === "fr" ? "1. Familles" : "1. Families"}</p>
           <div className="mt-3 space-y-1">
@@ -532,14 +547,14 @@ export default function CategoryManager({ accessToken, language }: { accessToken
         <div className="p-5 sm:p-6">
           <div className="flex flex-col justify-between gap-4 border-b border-[#e8e8e3] pb-5 dark:border-white/7 sm:flex-row sm:items-center">
             <div><p className="text-xs font-bold uppercase tracking-[.12em] text-[var(--yahro-muted)]">{language === "fr" ? "2. Postes" : "2. Posts"}</p><h2 className="mt-1 font-[Manrope_Variable] text-xl font-bold">{selectedFamily ? categoryName(selectedFamily, language) : ""}</h2></div>
-            <label className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--yahro-muted)]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={language === "fr" ? "Rechercher un poste" : "Search posts"} className="h-10 w-full rounded-xl border border-[#deded8] bg-[#fafaf7] pl-9 pr-3 text-sm dark:border-white/10 dark:bg-[#181914] sm:w-56" /></label>
+            <label className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--yahro-muted)]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={language === "fr" ? "Rechercher un poste" : "Search posts"} className="h-10 w-full rounded-xl border border-yahro-border bg-[#fafaf7] pl-9 pr-3 text-sm dark:border-white/10 dark:bg-[#181914] sm:w-56" /></label>
           </div>
 
           {loading ? <div className="mt-5 h-48 animate-pulse rounded-2xl bg-[#f1f1ed] dark:bg-white/5" /> : (
             <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,.72fr)]">
               <div>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {posts.map((post) => <div key={post.id} className={cn("group flex min-h-16 items-center rounded-xl border transition-all", selectedPost?.id === post.id ? "border-[#9ab678] bg-[#f0f5e8] dark:border-[#66864a] dark:bg-[#29331f]" : "border-[#e5e5df] bg-[#fafaf7] hover:border-[#d1ddc1] dark:border-white/7 dark:bg-[#1a1b17]")}><button type="button" onClick={() => setPostId(post.id)} className="flex min-h-16 min-w-0 flex-1 items-center gap-3 rounded-xl p-3 text-left"><span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-[#6c894a] shadow-sm dark:bg-white/7"><CategoryIcon name={post.icon} size={17} /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{categoryName(post, language)}</span><span className="mt-0.5 block text-[10px] text-[var(--yahro-muted)]">{post.isSystem ? (language === "fr" ? "Poste Yahro" : "Yahro post") : (language === "fr" ? "Poste personnel" : "Personal post")}</span></span></button>{!post.isSystem && <button type="button" onClick={() => { if (window.confirm(language === "fr" ? "Archiver ce poste personnel ?" : "Archive this personal post?")) void archivePost(post); }} className="yahro-touch-target mr-2 grid size-11 shrink-0 place-items-center rounded-xl text-[#777970] opacity-100 hover:bg-[#f3e7e3] sm:opacity-0 sm:group-hover:opacity-100" aria-label={language === "fr" ? "Archiver" : "Archive"}><Archive size={15} /></button>}</div>)}
+                  {posts.map((post) => <div key={post.id} className={cn("group flex min-h-16 items-center rounded-xl border transition-all", selectedPost?.id === post.id ? "border-[#9ab678] bg-[#f0f5e8] dark:border-[#66864a] dark:bg-[#29331f]" : "border-[#e5e5df] bg-[#fafaf7] hover:border-[#d1ddc1] dark:border-white/7 dark:bg-[#1a1b17]")}><button type="button" onClick={() => setPostId(post.id)} className="flex min-h-16 min-w-0 flex-1 items-center gap-3 rounded-xl p-3 text-left"><span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-[#6c894a] shadow-sm dark:bg-white/7"><CategoryIcon name={post.icon} size={17} /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{categoryName(post, language)}</span><span className="mt-0.5 block text-[10px] text-[var(--yahro-muted)]">{post.isSystem ? (language === "fr" ? "Poste Yahro" : "Yahro post") : (language === "fr" ? "Poste personnel" : "Personal post")}</span></span></button>{!post.isSystem && <button type="button" onClick={() => setArchiveTarget({ kind: "post", item: post })} className="yahro-hover-action yahro-touch-target mr-2 grid size-11 shrink-0 place-items-center rounded-xl text-[#777970] opacity-60 hover:bg-[#f3e7e3] hover:text-[#a25543] focus-visible:opacity-100 sm:group-hover:opacity-100" aria-label={language === "fr" ? "Archiver" : "Archive"}><Archive size={15} /></button>}</div>)}
                 </div>
                 <div className="mt-4 rounded-xl border border-dashed border-[#d7ddd0] p-3 dark:border-white/12"><div className="flex gap-2"><input value={newPost} onChange={(event) => setNewPost(event.target.value)} placeholder={language === "fr" ? "Créer un poste personnel" : "Create a personal post"} className="h-10 min-w-0 flex-1 bg-transparent px-2 text-sm outline-none" /><button type="button" onClick={() => void addPost()} disabled={!newPost.trim() || busy} className="inline-flex items-center gap-1 rounded-lg bg-[#e8f1da] px-3 text-xs font-bold text-[#4a642c] disabled:opacity-40 dark:bg-[#2e3b25] dark:text-[#c5dfa3]"><Plus size={14} />{language === "fr" ? "Ajouter" : "Add"}</button></div><p className="mb-2 mt-3 text-[11px] font-semibold text-[var(--yahro-muted)]">{language === "fr" ? "Choisir une icône pour ce poste" : "Choose an icon for this post"}</p><IconPicker value={newPostIcon} onChange={setNewPostIcon} language={language} /></div>
               </div>
@@ -548,17 +563,18 @@ export default function CategoryManager({ accessToken, language }: { accessToken
                 <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.1em] text-[#829165]"><ListChecks size={14} />{language === "fr" ? "3. Détails personnels" : "3. Personal details"}</p>
                 <p className="mt-2 text-xs leading-relaxed text-[var(--yahro-muted)]">{selectedPost ? categoryName(selectedPost, language) : (language === "fr" ? "Sélectionnez un poste" : "Select a post")}</p>
                 <div className="mt-4 space-y-2">
-                  {selectedDetails.map((detail) => <div key={detail.id} className="group flex items-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm shadow-sm dark:bg-white/6"><Tag size={13} className="text-[#789653]" /><span className="min-w-0 flex-1 truncate">{detail.name}</span><button type="button" onClick={() => void archiveDetail(detail)} className="text-[#aaa] opacity-0 group-hover:opacity-100" aria-label={language === "fr" ? "Archiver" : "Archive"}><Archive size={14} /></button></div>)}
+                  {selectedDetails.map((detail) => <div key={detail.id} className="group flex min-h-12 items-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm shadow-sm dark:bg-white/6"><Tag size={13} className="text-[#789653]" /><span className="min-w-0 flex-1 truncate">{detail.name}</span><button type="button" onClick={() => setArchiveTarget({ kind: "detail", item: detail })} className="yahro-hover-action yahro-touch-target grid size-11 place-items-center rounded-xl text-[#777970] opacity-60 hover:bg-[#f3e7e3] hover:text-[#a25543] focus-visible:opacity-100 group-hover:opacity-100" aria-label={language === "fr" ? "Archiver" : "Archive"}><Archive size={14} /></button></div>)}
                   {selectedPost && selectedDetails.length === 0 && <p className="rounded-lg border border-dashed border-[#d8dcd2] px-3 py-5 text-center text-xs text-[var(--yahro-muted)] dark:border-white/10">{language === "fr" ? "Aucun détail. Ce niveau est facultatif." : "No details. This level is optional."}</p>}
                 </div>
-                {selectedPost && <div className="mt-3 flex gap-2"><input value={newDetail} onChange={(event) => setNewDetail(event.target.value)} placeholder={language === "fr" ? "Votre précision" : "Your detail"} className="h-12 min-w-0 flex-1 rounded-lg border border-[#deded8] bg-white px-3 text-base dark:border-white/10 dark:bg-[#20211d] sm:h-10 sm:text-sm" /><button type="button" onClick={() => void addDetail()} disabled={!newDetail.trim() || busy} className="grid size-12 place-items-center rounded-lg bg-[#20211d] text-white disabled:opacity-40 dark:bg-[#dcebc5] dark:text-[#202b13]" aria-label={language === "fr" ? "Ajouter" : "Add"}><Plus size={15} /></button></div>}
+                {selectedPost && <div className="mt-3 flex gap-2"><input value={newDetail} onChange={(event) => setNewDetail(event.target.value)} placeholder={language === "fr" ? "Votre précision" : "Your detail"} className="h-12 min-w-0 flex-1 rounded-lg border border-yahro-border bg-white px-3 text-base dark:border-white/10 dark:bg-[#20211d] sm:h-10 sm:text-sm" /><button type="button" onClick={() => void addDetail()} disabled={!newDetail.trim() || busy} className="grid size-12 place-items-center rounded-lg bg-[#20211d] text-white disabled:opacity-40 dark:bg-[#dcebc5] dark:text-[#202b13]" aria-label={language === "fr" ? "Ajouter" : "Add"}><Plus size={15} /></button></div>}
                 <p className="mt-4 flex gap-2 text-[11px] leading-relaxed text-[var(--yahro-muted)]"><LockKeyhole size={13} className="mt-0.5 shrink-0" />{language === "fr" ? "Vos détails ne sont visibles que par vous, même dans un espace partagé." : "Your details are only visible to you, even in a shared workspace."}</p>
               </aside>
             </div>
           )}
-          {(notice || error) && <p className="mt-4 rounded-xl bg-[#f0f3ea] px-4 py-3 text-xs text-[#5d7044] dark:bg-[#293321] dark:text-[#bdd79a]">{notice ?? error}</p>}
+          {notice && <p className="mt-4 rounded-xl bg-[#f0f3ea] px-4 py-3 text-xs text-[#5d7044] dark:bg-[#293321] dark:text-[#bdd79a]">{notice}</p>}
         </div>
       </div>
+      <ConfirmDialog open={Boolean(archiveTarget)} title={archiveTarget?.kind === "post" ? (language === "fr" ? "Archiver ce poste personnel ?" : "Archive this personal post?") : (language === "fr" ? "Archiver ce détail personnel ?" : "Archive this personal detail?")} description={language === "fr" ? "Cet élément ne sera plus proposé dans les nouvelles saisies. Les opérations existantes restent conservées." : "This item will no longer be offered for new entries. Existing operations remain preserved."} confirmLabel={language === "fr" ? "Archiver" : "Archive"} cancelLabel={language === "fr" ? "Annuler" : "Cancel"} pending={busy} onClose={() => setArchiveTarget(undefined)} onConfirm={async () => { if (!archiveTarget) return; if (archiveTarget.kind === "post") await archivePost(archiveTarget.item); else await archiveDetail(archiveTarget.item); setArchiveTarget(undefined); }} />
     </section>
   );
 }

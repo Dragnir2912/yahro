@@ -12,6 +12,15 @@ export class ApiError extends Error {
   }
 }
 
+type UnauthorizedHandler = () => void;
+const unauthorizedHandlers = new Set<UnauthorizedHandler>();
+let refreshInFlight: Promise<{ accessToken: string; expiresIn: number }> | null = null;
+
+export function onUnauthorized(handler: UnauthorizedHandler) {
+  unauthorizedHandlers.add(handler);
+  return () => unauthorizedHandlers.delete(handler);
+}
+
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
@@ -33,6 +42,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as { code?: string; message?: string } | null;
+    if (response.status === 401 && options.accessToken) {
+      unauthorizedHandlers.forEach((handler) => handler());
+    }
     throw new ApiError(response.status, payload?.code ?? "REQUEST_ERROR", payload?.message ?? "Request failed");
   }
   if (response.status === 204) return undefined as T;
@@ -175,6 +187,7 @@ export interface BudgetProject {
 
 export interface ProjectExpense {
   id: string;
+  budgetLineId: string | null;
   description: string;
   amount: string;
   paymentMethod: PaymentMethod;
@@ -182,6 +195,21 @@ export interface ProjectExpense {
   notes: string | null;
   version: number;
   createdAt: string;
+}
+
+export interface ProjectBudgetLine {
+  id: string;
+  projectId: string;
+  name: string;
+  plannedAmount: string;
+  actualAmount: string;
+  lifetimeActualAmount: string;
+  expenseCount: number;
+  notes: string | null;
+  sortOrder: number;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ProjectInput {
@@ -221,7 +249,14 @@ export const api = {
     return request<{ accessToken: string; expiresIn: number }>("/api/auth/mfa/verify", { method: "POST", body: { mfaToken, code } });
   },
   refresh() {
-    return request<{ accessToken: string; expiresIn: number }>("/api/auth/refresh", { method: "POST" });
+    refreshInFlight ??= request<{ accessToken: string; expiresIn: number }>("/api/auth/refresh", { method: "POST" })
+      .catch(async (error: unknown) => {
+        if (!(error instanceof ApiError) || error.code !== "REFRESH_RETRY") throw error;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        return request<{ accessToken: string; expiresIn: number }>("/api/auth/refresh", { method: "POST" });
+      })
+      .finally(() => { refreshInFlight = null; });
+    return refreshInFlight;
   },
   me(accessToken: string) {
     return request<{ user: AuthResult["user"] & { firstName: string; lastName: string; nickname: string; avatarKey: string | null; profilePhotoData: string | null; countryCode: string | null; locale: string; timezone: string; defaultCurrency: string }; tenant: AuthResult["tenant"] }>(
@@ -295,6 +330,9 @@ export const api = {
   deleteTransaction(accessToken: string, id: string) {
     return request<void>(`/api/transactions/${encodeURIComponent(id)}`, { method: "DELETE", accessToken });
   },
+  restoreTransaction(accessToken: string, id: string) {
+    return request<{ data: FinanceTransaction }>(`/api/transactions/${encodeURIComponent(id)}/restore`, { method: "POST", accessToken });
+  },
   categories(accessToken: string) {
     return request<{ data: FinanceCategory[] }>("/api/categories", { accessToken });
   },
@@ -330,7 +368,7 @@ export const api = {
   updateBudget(accessToken: string, id: string, input: Partial<{ amount: string; frequency: BudgetFrequency; warningThreshold: number; rolloverEnabled: boolean; notes: string }> & { version: number }) {
     return request<{ data: FinanceBudget }>(`/api/budgets/${encodeURIComponent(id)}`, { method: "PATCH", accessToken, body: input });
   },
-  deleteBudget(accessToken: string, id: string) {
+  archiveBudget(accessToken: string, id: string) {
     return request<void>(`/api/budgets/${encodeURIComponent(id)}`, { method: "DELETE", accessToken });
   },
   dashboard(accessToken: string, from?: string, to?: string) {
@@ -355,10 +393,22 @@ export const api = {
   projectExpenses(accessToken: string, projectId: string) {
     return request<{ data: ProjectExpense[] }>(`/api/projects/${encodeURIComponent(projectId)}/expenses`, { accessToken });
   },
-  createProjectExpense(accessToken: string, projectId: string, input: { description: string; amount: string; paymentMethod: PaymentMethod; spentAt: string; notes?: string }) {
+  projectBudgetLines(accessToken: string, projectId: string) {
+    return request<{ data: ProjectBudgetLine[] }>(`/api/projects/${encodeURIComponent(projectId)}/budget-lines`, { accessToken });
+  },
+  createProjectBudgetLine(accessToken: string, projectId: string, input: { name: string; plannedAmount: string; notes?: string; sortOrder?: number }) {
+    return request<ProjectBudgetLine>(`/api/projects/${encodeURIComponent(projectId)}/budget-lines`, { method: "POST", accessToken, body: input });
+  },
+  updateProjectBudgetLine(accessToken: string, projectId: string, lineId: string, input: Partial<{ name: string; plannedAmount: string; notes: string | null; sortOrder: number }> & { version: number }) {
+    return request<ProjectBudgetLine>(`/api/projects/${encodeURIComponent(projectId)}/budget-lines/${encodeURIComponent(lineId)}`, { method: "PATCH", accessToken, body: input });
+  },
+  archiveProjectBudgetLine(accessToken: string, projectId: string, lineId: string) {
+    return request<void>(`/api/projects/${encodeURIComponent(projectId)}/budget-lines/${encodeURIComponent(lineId)}`, { method: "DELETE", accessToken });
+  },
+  createProjectExpense(accessToken: string, projectId: string, input: { budgetLineId?: string | null; description: string; amount: string; paymentMethod: PaymentMethod; spentAt: string; notes?: string }) {
     return request<ProjectExpense>(`/api/projects/${encodeURIComponent(projectId)}/expenses`, { method: "POST", accessToken, body: input });
   },
-  updateProjectExpense(accessToken: string, projectId: string, expenseId: string, input: Partial<{ description: string; amount: string; paymentMethod: PaymentMethod; spentAt: string; notes: string | null }> & { version: number }) {
+  updateProjectExpense(accessToken: string, projectId: string, expenseId: string, input: Partial<{ budgetLineId: string | null; description: string; amount: string; paymentMethod: PaymentMethod; spentAt: string; notes: string | null }> & { version: number }) {
     return request<ProjectExpense>(`/api/projects/${encodeURIComponent(projectId)}/expenses/${encodeURIComponent(expenseId)}`, { method: "PATCH", accessToken, body: input });
   },
   deleteProjectExpense(accessToken: string, projectId: string, expenseId: string) {

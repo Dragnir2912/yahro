@@ -88,7 +88,7 @@ export default function AccessibleDialog({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[90] flex min-h-[100dvh] items-end justify-center overflow-y-auto bg-black/40 px-[env(safe-area-inset-left)] pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] backdrop-blur-[2px] sm:items-center sm:p-6",
+        "yahro-scrollbar-hidden fixed inset-0 z-[90] flex min-h-[100dvh] items-end justify-center overflow-y-auto bg-black/40 px-[env(safe-area-inset-left)] pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] backdrop-blur-[2px] sm:items-center sm:p-6",
         overlayClassName,
       )}
       onMouseDown={(event) => {
@@ -104,7 +104,7 @@ export default function AccessibleDialog({
         aria-describedby={descriptionId}
         tabIndex={-1}
         className={cn(
-          "max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full overflow-y-auto overscroll-contain rounded-t-[28px] border border-[#dfdfd9] bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-[#20211d] sm:max-h-[min(94dvh,900px)] sm:rounded-[24px]",
+          "yahro-scrollbar-hidden max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full overflow-y-auto overscroll-contain rounded-t-[28px] border border-[#dfdfd9] bg-white p-6 text-[var(--yahro-text)] shadow-2xl dark:border-white/10 dark:bg-[#20211d] sm:max-h-[min(94dvh,900px)] sm:rounded-[24px]",
           className,
         )}
       >

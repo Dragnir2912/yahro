@@ -17,12 +17,14 @@ type CashFlowPoint = {
 type CashFlowChartProps = {
   data: CashFlowPoint[];
   formatValue: (value: number) => string;
+  label: string;
 };
 
-export default function CashFlowChart({ data, formatValue }: CashFlowChartProps) {
+export default function CashFlowChart({ data, formatValue, label }: CashFlowChartProps) {
   return (
-    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
-      <AreaChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: -24 }}>
+    <div className="h-full w-full" role="img" aria-label={label} tabIndex={0}>
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+      <AreaChart accessibilityLayer={false} data={data} margin={{ top: 8, right: 4, bottom: 0, left: -24 }}>
         <defs>
           <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#769450" stopOpacity={0.28} />
@@ -40,6 +42,7 @@ export default function CashFlowChart({ data, formatValue }: CashFlowChartProps)
         <Area type="monotone" dataKey="income" stroke="#769450" strokeWidth={2.5} fill="url(#incomeGradient)" />
         <Area type="monotone" dataKey="expenses" stroke="#a7a9a1" strokeWidth={2} fill="transparent" strokeDasharray="5 5" />
       </AreaChart>
-    </ResponsiveContainer>
+      </ResponsiveContainer>
+    </div>
   );
 }

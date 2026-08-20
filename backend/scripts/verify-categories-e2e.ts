@@ -137,6 +137,34 @@ try {
   });
   expectStatus(budgetResponse.statusCode, 201, "post budget creation");
 
+  const familyBudgetResponse = await app.inject({
+    method: "POST",
+    url: "/api/budgets",
+    headers: owner.authorization,
+    payload: {
+      categoryId: foodFamily.id,
+      periodStart: "2026-08-01T00:00:00.000Z",
+      periodEnd: "2026-09-01T00:00:00.000Z",
+      amount: "100000",
+      currency: "XOF",
+      frequency: "MONTHLY",
+      warningThreshold: 80,
+      rolloverEnabled: false,
+    },
+  });
+  expectStatus(familyBudgetResponse.statusCode, 201, "family budget creation");
+  const familyBudget = familyBudgetResponse.json<{ data: { id: string } }>().data;
+
+  const dashboardResponse = await app.inject({ method: "GET", url: "/api/dashboard", headers: owner.authorization });
+  expectStatus(dashboardResponse.statusCode, 200, "dashboard budget progress");
+  const familyProgress = dashboardResponse.json<{ budgetProgress: Array<{ id: string; spent: string }> }>().budgetProgress.find((item) => item.id === familyBudget.id);
+  if (Number(familyProgress?.spent) !== 2500) throw new Error(`family budget did not include child post spending: ${familyProgress?.spent ?? "missing"}`);
+
+  expectStatus((await app.inject({ method: "DELETE", url: `/api/budgets/${familyBudget.id}`, headers: owner.authorization })).statusCode, 204, "family budget archive");
+  const activeBudgets = await app.inject({ method: "GET", url: "/api/budgets?from=2026-08-01T00:00:00.000Z&to=2026-09-01T00:00:00.000Z", headers: owner.authorization });
+  expectStatus(activeBudgets.statusCode, 200, "active budget list");
+  if (activeBudgets.json<{ data: Array<{ id: string }> }>().data.some((item) => item.id === familyBudget.id)) throw new Error("archived budget is still returned as active");
+
   const outsider = await registerAndLogin("category-outsider");
   const outsiderDetail = await app.inject({
     method: "POST",
@@ -153,6 +181,8 @@ try {
   process.stdout.write("category_personal_detail_privacy=ok\n");
   process.stdout.write("category_transaction_tracking=ok\n");
   process.stdout.write("category_budget_tracking=ok\n");
+  process.stdout.write("category_family_budget_rollup=ok\n");
+  process.stdout.write("budget_archive_semantics=ok\n");
 } finally {
   await app.close();
 }

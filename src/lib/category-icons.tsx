@@ -262,7 +262,7 @@ export function CategoryIcon({ name, size = 18, className }: { name?: string | n
 
 export function IconPicker({ value, onChange, language }: { value: string; onChange: (value: string) => void; language: "fr" | "en" }) {
   return (
-    <div className="grid max-h-44 grid-cols-6 gap-2 overflow-y-auto rounded-xl border border-[#deded8] bg-[#fafaf7] p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden dark:border-white/10 dark:bg-[#181914] sm:grid-cols-8">
+    <div className="grid max-h-44 grid-cols-6 gap-2 overflow-y-auto rounded-xl border border-yahro-border bg-[#fafaf7] p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden dark:border-white/10 dark:bg-[#181914] sm:grid-cols-8">
       {categoryIconOptions.map((option) => {
         const Icon = option.icon;
         const label = language === "fr" ? option.fr : option.en;

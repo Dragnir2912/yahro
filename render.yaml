@@ -90,6 +90,8 @@ services:
         value: "5242880"
       - key: MAX_CSV_ROWS
         value: "10000"
+      - key: REFRESH_REUSE_GRACE_SECONDS
+        value: "5"
 
 databases:
   - name: yahro-postgres

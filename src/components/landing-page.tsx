@@ -28,6 +28,7 @@ import { api, ApiError, type AuthResult } from "@/lib/api";
 import { currencyName } from "@/lib/currencies";
 import { setPageMetadata } from "@/lib/page-metadata";
 import AccessibleDialog from "@/components/ui/accessible-dialog";
+import { applyTheme, initialTheme, subscribeToSystemTheme } from "@/lib/theme";
 
 export type LandingLanguage = "fr" | "en";
 type Theme = "light" | "dark";
@@ -284,42 +285,42 @@ function DashboardPreview({ language }: { language: LandingLanguage }) {
   const t = (key: string) => text[language][key];
   const bars = [42, 60, 48, 75, 58, 84, 72, 88, 76, 93, 82, 96];
   return (
-    <div className="relative mx-auto w-full max-w-[1120px] overflow-hidden rounded-[22px] border border-black/10 bg-[#f6f6f2] text-[#22231e] shadow-[0_35px_100px_rgba(31,33,26,.22)] dark:border-white/10 dark:bg-[#171813] dark:text-[#efefe9] dark:shadow-[0_35px_120px_rgba(0,0,0,.7)]">
+    <div aria-hidden="true" className="relative mx-auto w-full max-w-[1120px] overflow-hidden rounded-[22px] border border-black/10 bg-[#f6f6f2] text-[#22231e] shadow-[0_35px_100px_rgba(31,33,26,.22)] dark:border-white/10 dark:bg-[#171813] dark:text-[#efefe9] dark:shadow-[0_35px_120px_rgba(0,0,0,.7)]">
       <div className="flex h-12 items-center border-b border-black/8 bg-white/80 px-4 dark:border-white/8 dark:bg-[#1d1e1a]">
         <div className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-[#ff6b5f]" /><span className="size-2.5 rounded-full bg-[#f4bc4f]" /><span className="size-2.5 rounded-full bg-[#62c554]" /></div>
-        <div className="mx-auto flex h-6 w-52 items-center rounded-md bg-black/[.04] px-2 text-[8px] text-[var(--yahro-muted)] dark:bg-white/5">app.yahro.local</div>
+        <div className="mx-auto flex h-7 w-52 items-center rounded-md bg-black/[.04] px-2 text-[11px] text-[var(--yahro-muted)] dark:bg-white/5">app.yahro.local</div>
       </div>
       <div className="grid min-h-[460px] grid-cols-[180px_1fr] max-md:grid-cols-[64px_1fr] sm:min-h-[510px]">
         <aside className="border-r border-black/7 bg-white/50 p-3 dark:border-white/7 dark:bg-[#1b1c17]">
-          <div className="mb-7 flex items-center gap-2 px-2"><Logo compact /><span className="font-[Manrope_Variable] text-xs font-extrabold max-md:hidden">yahro</span></div>
+          <div className="mb-7 flex items-center gap-2 px-2"><span className="grid size-9 place-items-center overflow-hidden rounded-xl bg-[#ecefe5] p-1 dark:bg-white/8"><img src="/brand/yahro-mark.png" alt="" className="size-full object-contain" /></span><span className="font-[Manrope_Variable] text-xs font-extrabold max-md:hidden">yahro</span></div>
           {[WalletCards, ReceiptText, PieChart, BarChart3].map((Icon, index) => (
-            <div key={index} className={cn("mb-1 flex h-9 items-center gap-2 rounded-lg px-2 text-[9px]", index === 0 ? "bg-[#e7f0d9] text-[#48612d] dark:bg-[#293620] dark:text-[#c6dfa4]" : "text-[var(--yahro-muted)]")}>
-              <Icon size={13} /><span className="max-md:hidden">{["Overview", "Transactions", "Budgets", "Analytics"][index]}</span>
+            <div key={index} className={cn("mb-1 flex h-9 items-center gap-2 rounded-lg px-2 text-[11px]", index === 0 ? "bg-[#e7f0d9] text-[#48612d] dark:bg-[#293620] dark:text-[#c6dfa4]" : "text-[var(--yahro-muted)]")}>
+              <Icon size={13} /><span className="max-md:hidden">{(language === "fr" ? ["Vue d'ensemble", "Opérations", "Budgets", "Analyses"] : ["Overview", "Transactions", "Budgets", "Analytics"])[index]}</span>
             </div>
           ))}
         </aside>
         <div className="min-w-0 p-4 sm:p-6">
           <div className="mb-5 flex items-center justify-between">
-            <div><p className="font-[Manrope_Variable] text-base font-extrabold sm:text-xl">Dashboard</p><p className="mt-1 text-[8px] text-[var(--yahro-muted)] sm:text-[10px]">August 2026 - Personal workspace</p></div>
-            <div className="flex items-center gap-2"><span className="hidden h-7 w-36 items-center rounded-lg bg-white px-2 text-[8px] text-[var(--yahro-muted)] shadow-sm dark:bg-white/5 sm:flex">Search...</span><span className="grid size-7 place-items-center rounded-lg bg-white dark:bg-white/5"><BellRing size={12} /></span></div>
+            <div><p className="font-[Manrope_Variable] text-base font-extrabold sm:text-xl">{language === "fr" ? "Tableau de bord" : "Dashboard"}</p><p className="mt-1 text-[11px] text-[var(--yahro-muted)]">{language === "fr" ? "Août 2026 - Espace personnel" : "August 2026 - Personal workspace"}</p></div>
+            <div className="flex items-center gap-2"><span className="hidden h-7 w-36 items-center rounded-lg bg-white px-2 text-[11px] text-[var(--yahro-muted)] shadow-sm dark:bg-white/5 sm:flex">{language === "fr" ? "Rechercher..." : "Search..."}</span><span className="grid size-7 place-items-center rounded-lg bg-white dark:bg-white/5"><BellRing size={12} /></span></div>
           </div>
           <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
             {[
-              { label: t("totalBalance"), value: "14 963,50 €", accent: true },
-              { label: t("income"), value: "4 520 €" },
-              { label: t("expenses"), value: "2 402 €" },
-              { label: "Savings", value: "36,8 %" },
+              { label: t("totalBalance"), value: "2 480 600 FCFA", accent: true },
+              { label: t("income"), value: "820 000 FCFA" },
+              { label: t("expenses"), value: "293 200 FCFA" },
+              { label: language === "fr" ? "Épargne" : "Savings", value: "64,2 %" },
             ].map((stat) => (
               <div key={stat.label} className={cn("rounded-xl border p-3 sm:p-4", stat.accent ? "border-[#20211d] bg-[#20211d] text-white dark:border-[#dcebc5] dark:bg-[#dcebc5] dark:text-[#202b13]" : "border-black/7 bg-white dark:border-white/7 dark:bg-[#20211d]")}>
-                <p className={cn("text-[8px] sm:text-[10px]", stat.accent ? "opacity-55" : "text-[var(--yahro-muted)]")}>{stat.label}</p>
-                <p className="mt-2 font-[Manrope_Variable] text-sm font-extrabold tracking-[-.04em] sm:text-lg">{stat.value}</p>
-                <p className="mt-1 text-[7px] font-bold text-[#769450]">+ 8.2%</p>
+                <p className={cn("text-[11px]", stat.accent ? "opacity-70" : "text-[var(--yahro-muted)]")}>{stat.label}</p>
+                <p className="yahro-money mt-2 font-[Manrope_Variable] text-sm font-extrabold sm:text-lg">{stat.value}</p>
+                <p className="mt-1 text-[11px] font-bold text-[var(--yahro-accent-text)]">+ 8,2 %</p>
               </div>
             ))}
           </div>
           <div className="mt-3 grid gap-3 lg:grid-cols-[1.45fr_.75fr]">
             <div className="rounded-xl border border-black/7 bg-white p-3 dark:border-white/7 dark:bg-[#20211d] sm:p-4">
-              <div className="mb-3 flex items-center justify-between"><p className="text-[10px] font-bold sm:text-xs">Cash flow</p><p className="text-[8px] text-[var(--yahro-muted)]">Last 6 months</p></div>
+              <div className="mb-3 flex items-center justify-between"><p className="text-[11px] font-bold sm:text-xs">{language === "fr" ? "Flux de trésorerie" : "Cash flow"}</p><p className="text-[11px] text-[var(--yahro-muted)]">{language === "fr" ? "6 derniers mois" : "Last 6 months"}</p></div>
               <div className="flex h-28 items-end gap-1.5 border-b border-black/6 dark:border-white/7 sm:h-36 sm:gap-2">
                 {bars.map((height, index) => <div key={index} className="group relative flex-1"><div className="absolute bottom-0 w-full rounded-t-sm bg-[#dce9ca] dark:bg-[#35452a]" style={{ height: `${Math.max(18, height - 24)}%` }} /><div className="absolute bottom-0 w-full rounded-t-sm bg-[#779850]" style={{ height: `${height}%`, opacity: .88 }} /></div>)}
               </div>
@@ -327,12 +328,12 @@ function DashboardPreview({ language }: { language: LandingLanguage }) {
             <div className="rounded-xl border border-black/7 bg-white p-3 dark:border-white/7 dark:bg-[#20211d] sm:p-4">
               <div className="flex items-center justify-between"><p className="text-[10px] font-bold sm:text-xs">{t("monthlyBudget")}</p><PieChart size={13} className="text-[#769450]" /></div>
               <div className="mx-auto my-3 grid size-20 place-items-center rounded-full bg-[conic-gradient(#769450_0_66%,#e8e9e3_66%)] dark:bg-[conic-gradient(#90b566_0_66%,#353730_66%)] sm:size-24"><div className="grid size-14 place-items-center rounded-full bg-white text-center dark:bg-[#20211d] sm:size-17"><span className="text-sm font-extrabold">66%</span></div></div>
-              <p className="text-center text-[8px] text-[var(--yahro-muted)]">1 858 € / 2 800 €</p>
+              <p className="yahro-money text-center text-[11px] text-[var(--yahro-muted)]">1 858 000 FCFA / 2 800 000 FCFA</p>
             </div>
           </div>
           <div className="mt-3 rounded-xl border border-black/7 bg-white p-3 dark:border-white/7 dark:bg-[#20211d] sm:p-4">
             <p className="mb-2 text-[10px] font-bold sm:text-xs">{t("recent")}</p>
-            {[{name:"Carrefour Market",value:"-84,30 €"},{name:"Salary - ENSEA",value:"+2 450 €"}].map((item, index) => <div key={item.name} className="flex items-center gap-2 border-t border-black/5 py-2 first:border-0 dark:border-white/6"><span className={cn("grid size-6 place-items-center rounded-md", index ? "bg-[#e4efdb] text-[#668645]" : "bg-[#f1eadc] text-[#a17028]")}>{index ? <Landmark size={11} /> : <ReceiptText size={11} />}</span><span className="flex-1 text-[8px] sm:text-[9px]">{item.name}</span><span className={cn("text-[8px] font-bold sm:text-[9px]", index > 0 && "text-[#668645]")}>{item.value}</span></div>)}
+            {[{name:"Carrefour Market",value:"-84 300 FCFA"},{name:language === "fr" ? "Salaire - ENSEA" : "Salary - ENSEA",value:"+820 000 FCFA"}].map((item, index) => <div key={item.name} className="flex items-center gap-2 border-t border-black/5 py-2 first:border-0 dark:border-white/6"><span className={cn("grid size-6 place-items-center rounded-md", index ? "bg-[#e4efdb] text-[#668645]" : "bg-[#f1eadc] text-[#a17028]")}>{index ? <Landmark size={11} /> : <ReceiptText size={11} />}</span><span className="flex-1 text-[11px]">{item.name}</span><span className={cn("yahro-money text-[11px] font-bold", index > 0 && "text-[var(--yahro-accent-text)]")}>{item.value}</span></div>)}
           </div>
         </div>
       </div>
@@ -536,7 +537,7 @@ function AuthDialog({ mode, language, onModeChange, onClose, onDemo, onAuthentic
                 <div className={cn("mb-5 grid gap-4", !isSignIn && "sm:grid-cols-2")}><label className="block text-sm font-semibold">{t("password")}<input name="password" type="password" required minLength={isSignIn ? 1 : 12} maxLength={128} autoComplete={isSignIn ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="************" className="mt-2 h-12 w-full rounded-xl border border-black/10 bg-white px-3 text-base font-normal placeholder:text-[var(--yahro-muted)] dark:border-white/10 dark:bg-[#171813] sm:h-11 sm:text-sm" /></label>{!isSignIn && <label className="block text-sm font-semibold">{t("confirmPassword")}<input name="password-confirmation" type="password" required minLength={12} maxLength={128} autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} placeholder="************" className="mt-2 h-12 w-full rounded-xl border border-black/10 bg-white px-3 text-base font-normal placeholder:text-[var(--yahro-muted)] dark:border-white/10 dark:bg-[#171813] sm:h-11 sm:text-sm" /></label>}</div>
               </>}
               {!isSignIn && signupStep === 2 && <label className="mb-5 flex min-h-12 cursor-pointer items-start gap-3 text-xs leading-relaxed text-[#666860] dark:text-[#b7b9b1]"><input type="checkbox" required checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#6f904b]" /><span>{t("legalPrefix")} <a href="/conditions" target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="font-semibold text-[#5f7e3e] underline underline-offset-2 dark:text-[#acd082]">{t("terms").toLocaleLowerCase(language)}</a> {t("legalAnd")} <a href="/confidentialite" target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="font-semibold text-[#5f7e3e] underline underline-offset-2 dark:text-[#acd082]">{t("privacy").toLocaleLowerCase(language)}</a>.</span></label>}
-              {isSignIn && <button type="button" disabled={pending} onClick={requestReset} className="-mt-2 mb-5 block text-xs font-semibold text-[#668744] hover:underline disabled:opacity-50">{t("forgot")}</button>}
+              {isSignIn && <button type="button" disabled={pending} onClick={requestReset} className="-mt-2 mb-5 inline-flex min-h-11 items-center text-xs font-semibold text-[var(--yahro-accent-text)] hover:underline disabled:opacity-50">{t("forgot")}</button>}
             </>
           )}
           {message && <p role="status" className={cn("mb-4 rounded-xl px-3 py-2 text-xs", message.tone === "success" ? "bg-[#edf3e4] text-[#607247] dark:bg-[#27331f] dark:text-[#b5ca98]" : "bg-[#f5e5e1] text-[#a25140] dark:bg-[#412925] dark:text-[#e49a89]")}>{message.text}</p>}
@@ -555,15 +556,14 @@ function AuthDialog({ mode, language, onModeChange, onClose, onDemo, onAuthentic
 
 export default function LandingPage({ onDemo, onAuthenticated }: LandingPageProps) {
   const [language, setLanguage] = useState<LandingLanguage>(() => (window.localStorage.getItem("yahro-language") === "en" ? "en" : "fr"));
-  const [theme, setTheme] = useState<Theme>(() => (window.localStorage.getItem("yahro-theme") === "dark" ? "dark" : "light"));
+  const [theme, setTheme] = useState<Theme>(initialTheme);
   const [menuOpen, setMenuOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const t = (key: string) => text[language][key];
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    applyTheme(theme);
     document.documentElement.lang = language;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#080a07" : "#f7f7f3");
     setPageMetadata(
       language === "fr" ? "Yahro - Votre argent, enfin sous contrôle" : "Yahro - Your money, finally under control",
       language === "fr" ? "Suivez vos dépenses, vos budgets et vos projets dans un espace personnel sécurisé, sans connexion bancaire obligatoire." : "Track spending, budgets and projects in a secure personal space, with no mandatory bank connection.",
@@ -573,8 +573,9 @@ export default function LandingPage({ onDemo, onAuthenticated }: LandingPageProp
   const toggleTheme = () => {
     const next = theme === "light" ? "dark" : "light";
     setTheme(next);
-    window.localStorage.setItem("yahro-theme", next);
+    applyTheme(next, true);
   };
+  useEffect(() => subscribeToSystemTheme(setTheme), []);
   const toggleLanguage = () => {
     const next = language === "fr" ? "en" : "fr";
     setLanguage(next);
@@ -594,27 +595,28 @@ export default function LandingPage({ onDemo, onAuthenticated }: LandingPageProp
 
   return (
     <div id="top" className="min-h-screen overflow-hidden bg-[#f7f7f3] text-[#191a16] transition-colors dark:bg-[#080a07] dark:text-[#f4f4ef]">
+      <a href="#landing-main-content" className="yahro-skip-link">{language === "fr" ? "Aller au contenu" : "Skip to content"}</a>
       <header className="fixed inset-x-0 top-0 z-50 border-b border-black/7 bg-[#f7f7f3]/82 pt-[env(safe-area-inset-top)] backdrop-blur-xl dark:border-white/8 dark:bg-[#080a07]/82">
         <nav className="mx-auto grid h-[72px] max-w-[1600px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-5 sm:px-8">
           <Logo />
-          <div className="hidden min-w-0 items-center justify-center gap-6 min-[1340px]:flex min-[1500px]:gap-8">
+          <div className="hidden min-w-0 items-center justify-center gap-6 xl:flex 2xl:gap-8">
             <a href="#features" className="text-sm font-medium text-[var(--yahro-muted)] transition-colors hover:text-[#1d1e19] dark:text-[var(--yahro-muted)] dark:hover:text-white">{t("features")}</a>
             <a href="#how" className="text-sm font-medium text-[var(--yahro-muted)] transition-colors hover:text-[#1d1e19] dark:text-[var(--yahro-muted)] dark:hover:text-white">{t("how")}</a>
             <a href="#security" className="text-sm font-medium text-[var(--yahro-muted)] transition-colors hover:text-[#1d1e19] dark:text-[var(--yahro-muted)] dark:hover:text-white">{t("security")}</a>
             <a href="#faq" className="text-sm font-medium text-[var(--yahro-muted)] transition-colors hover:text-[#1d1e19] dark:text-[var(--yahro-muted)] dark:hover:text-white">{t("faq")}</a>
           </div>
           <div className="flex items-center gap-1.5">
-            <button type="button" onClick={toggleTheme} className="yahro-touch-target grid size-12 place-items-center rounded-xl text-[#696b63] hover:bg-black/5 dark:text-[#b2b4ac] dark:hover:bg-white/7 min-[1340px]:size-10" aria-label={theme === "light" ? "Dark mode" : "Light mode"}>{theme === "light" ? <Moon size={17} /> : <Sun size={17} />}</button>
-            <button type="button" onClick={toggleLanguage} className="yahro-touch-target flex h-12 items-center gap-1.5 rounded-xl px-2 text-xs font-bold text-[#696b63] hover:bg-black/5 dark:text-[#b2b4ac] dark:hover:bg-white/7 min-[1340px]:h-10" aria-label="Language"><Globe2 size={16} />{language.toUpperCase()}</button>
-            <button type="button" onClick={() => setAuthMode("signin")} className="ml-1 hidden h-12 rounded-xl px-3 text-sm font-semibold text-[#55574f] hover:bg-black/5 dark:text-[#d1d2cc] dark:hover:bg-white/7 sm:block min-[1340px]:h-10">{t("signIn")}</button>
-            <button type="button" onClick={() => setAuthMode("signup")} className="hidden h-12 rounded-xl bg-[#20211d] px-4 text-sm font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 dark:bg-[#f0f1eb] dark:text-[#141510] sm:block min-[1340px]:h-10">{t("signUp")}</button>
-            <button type="button" onClick={() => setMenuOpen((open) => !open)} className="yahro-touch-target ml-1 grid size-12 place-items-center rounded-xl min-[1340px]:hidden" aria-label="Menu">{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
+            <button type="button" onClick={toggleTheme} className="yahro-touch-target grid size-12 place-items-center rounded-xl text-[#696b63] hover:bg-black/5 dark:text-[#b2b4ac] dark:hover:bg-white/7 xl:size-10" aria-label={theme === "light" ? "Dark mode" : "Light mode"}>{theme === "light" ? <Moon size={17} /> : <Sun size={17} />}</button>
+            <button type="button" onClick={toggleLanguage} className="yahro-touch-target flex h-12 items-center gap-1.5 rounded-xl px-2 text-xs font-bold text-[#696b63] hover:bg-black/5 dark:text-[#b2b4ac] dark:hover:bg-white/7 xl:h-10" aria-label="Language"><Globe2 size={16} />{language.toUpperCase()}</button>
+            <button type="button" onClick={() => setAuthMode("signin")} className="ml-1 hidden h-12 rounded-xl px-3 text-sm font-semibold text-[#55574f] hover:bg-black/5 dark:text-[#d1d2cc] dark:hover:bg-white/7 sm:block xl:h-10">{t("signIn")}</button>
+            <button type="button" onClick={() => setAuthMode("signup")} className="hidden h-12 rounded-xl bg-[#20211d] px-4 text-sm font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 dark:bg-[#f0f1eb] dark:text-[#141510] sm:block xl:h-10">{t("signUp")}</button>
+            <button type="button" onClick={() => setMenuOpen((open) => !open)} className="yahro-touch-target ml-1 grid size-12 place-items-center rounded-xl xl:hidden" aria-label="Menu">{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
           </div>
         </nav>
-        {menuOpen && <div className="animate-soft-pop border-t border-black/6 bg-[#f7f7f3] px-5 py-4 dark:border-white/7 dark:bg-[#10110e] min-[1340px]:hidden"><div className="mx-auto flex max-w-[1320px] flex-col gap-1">{[["features", "#features"],["how", "#how"],["security", "#security"],["faq", "#faq"]].map(([key,href]) => <a key={key} href={href} onClick={() => setMenuOpen(false)} className="flex min-h-12 items-center rounded-xl px-3 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/6">{t(key)}</a>)}<div className="mt-2 grid grid-cols-2 gap-2 border-t border-black/7 pt-3 dark:border-white/7"><button type="button" onClick={() => setAuthMode("signin")} className="h-12 rounded-xl border border-black/10 text-sm font-bold dark:border-white/10">{t("signIn")}</button><button type="button" onClick={() => setAuthMode("signup")} className="h-12 rounded-xl bg-[#20211d] text-sm font-bold text-white dark:bg-[#e9eadf] dark:text-[#171813]">{t("signUp")}</button></div></div></div>}
+        {menuOpen && <div className="animate-soft-pop border-t border-black/6 bg-[#f7f7f3] px-5 py-4 dark:border-white/7 dark:bg-[#10110e] xl:hidden"><div className="mx-auto flex max-w-[1320px] flex-col gap-1">{[["features", "#features"],["how", "#how"],["security", "#security"],["faq", "#faq"]].map(([key,href]) => <a key={key} href={href} onClick={() => setMenuOpen(false)} className="flex min-h-12 items-center rounded-xl px-3 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/6">{t(key)}</a>)}<div className="mt-2 grid grid-cols-2 gap-2 border-t border-black/7 pt-3 dark:border-white/7"><button type="button" onClick={() => setAuthMode("signin")} className="h-12 rounded-xl border border-black/10 text-sm font-bold dark:border-white/10">{t("signIn")}</button><button type="button" onClick={() => setAuthMode("signup")} className="h-12 rounded-xl bg-[#20211d] text-sm font-bold text-white dark:bg-[#e9eadf] dark:text-[#171813]">{t("signUp")}</button></div></div></div>}
       </header>
 
-      <main>
+      <main id="landing-main-content" tabIndex={-1}>
         <section className="relative px-5 pb-10 pt-[calc(8rem+env(safe-area-inset-top))] sm:px-8 sm:pt-[calc(10rem+env(safe-area-inset-top))] lg:pt-[calc(11rem+env(safe-area-inset-top))]">
           <div className="pointer-events-none absolute left-1/2 top-12 h-[620px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(174,205,132,.18),transparent_65%)] opacity-60 blur-3xl dark:opacity-25" />
           <div className="relative mx-auto flex max-w-4xl flex-col items-center text-center">
@@ -635,7 +637,7 @@ export default function LandingPage({ onDemo, onAuthenticated }: LandingPageProp
         <section className="border-y border-black/6 bg-white/45 px-5 py-8 text-center dark:border-white/6 dark:bg-white/[.025] sm:px-8"><p className="text-sm text-[var(--yahro-muted)] dark:text-[#9c9e96]">{t("trusted")}</p></section>
 
         <section id="features" className="scroll-mt-24 px-5 py-24 sm:px-8 lg:py-32">
-          <div className="mx-auto max-w-[1180px]"><div className="max-w-2xl"><p className="text-xs font-bold uppercase tracking-[.15em] text-[#759450]">{t("featureEyebrow")}</p><h2 className="mt-4 font-[Manrope_Variable] text-3xl font-extrabold tracking-[-.05em] sm:text-5xl">{t("featureTitle")}</h2><p className="mt-4 text-[var(--yahro-muted)] dark:text-[#9fa199] sm:text-lg">{t("featureDescription")}</p></div>
+          <div className="mx-auto max-w-[1180px]"><div className="max-w-2xl"><p className="text-xs font-bold uppercase tracking-[.15em] text-[var(--yahro-accent-text)]">{t("featureEyebrow")}</p><h2 className="mt-4 font-[Manrope_Variable] text-3xl font-extrabold tracking-[-.05em] sm:text-5xl">{t("featureTitle")}</h2><p className="mt-4 text-[var(--yahro-muted)] dark:text-[#9fa199] sm:text-lg">{t("featureDescription")}</p></div>
             <div className="mt-12 grid gap-4 md:grid-cols-3">{[
               {icon:PieChart,title:"smartBudget",body:"smartBudgetText",tone:"bg-[#e8f1da] text-[#5b7837] dark:bg-[#293620] dark:text-[#b8d793]"},
               {icon:WalletCards,title:"allAccounts",body:"allAccountsText",tone:"bg-[#e4ecef] text-[#577584] dark:bg-[#243238] dark:text-[#9bc0ce]"},
@@ -646,19 +648,19 @@ export default function LandingPage({ onDemo, onAuthenticated }: LandingPageProp
 
         <section id="how" className="scroll-mt-24 bg-[#20211d] px-5 py-24 text-white dark:bg-[#11120f] sm:px-8 lg:py-32"><div className="mx-auto max-w-[1180px]"><p className="text-xs font-bold uppercase tracking-[.15em] text-[#acd17f]">{t("flowEyebrow")}</p><h2 className="mt-4 max-w-2xl font-[Manrope_Variable] text-3xl font-extrabold tracking-[-.05em] sm:text-5xl">{t("flowTitle")}</h2><div className="mt-14 grid gap-8 md:grid-cols-3">{[["01","step1","step1Text"],["02","step2","step2Text"],["03","step3","step3Text"]].map(([num,title,body],index) => <article key={num} className="relative border-t border-white/15 pt-6"><span className="text-xs font-bold text-[#acd17f]">{num}</span><h3 className="mt-8 font-[Manrope_Variable] text-xl font-bold">{t(title)}</h3><p className="mt-3 text-sm leading-relaxed text-white/50">{t(body)}</p>{index < 2 && <ArrowRight className="absolute -right-5 top-5 hidden text-white/15 md:block" size={18} />}</article>)}</div></div></section>
 
-        <section id="security" className="scroll-mt-24 px-5 py-24 sm:px-8 lg:py-32"><div className="mx-auto grid max-w-[1180px] items-center gap-12 rounded-[32px] border border-black/8 bg-white/65 p-7 dark:border-white/8 dark:bg-white/[.035] md:grid-cols-[.8fr_1.2fr] sm:p-12"><div className="relative mx-auto grid size-56 place-items-center rounded-full bg-[#edf3e4] dark:bg-[#222d1c]"><div className="absolute inset-5 rounded-full border border-[#bbd09d] dark:border-[#435a32]" /><div className="absolute inset-10 rounded-full border border-[#d2e0bd] dark:border-[#344628]" /><span className="relative grid size-20 place-items-center rounded-[26px] bg-[#20211d] text-[#dff3bd] shadow-xl dark:bg-[#dff3bd] dark:text-[#20211d]"><ShieldCheck size={34} /></span></div><div><p className="text-xs font-bold uppercase tracking-[.15em] text-[#759450]">{t("secureEyebrow")}</p><h2 className="mt-4 font-[Manrope_Variable] text-3xl font-extrabold tracking-[-.05em] sm:text-4xl">{t("secureTitle")}</h2><p className="mt-4 leading-relaxed text-[var(--yahro-muted)] dark:text-[var(--yahro-muted)]">{t("secureText")}</p><div className="mt-7 flex flex-wrap gap-2">{[[LockKeyhole,"local"],[Eye,"noTracking"],[ArrowRight,"exportAnytime"]].map(([Icon,key]) => { const I=Icon as typeof LockKeyhole; return <span key={key as string} className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white px-3 py-2 text-xs font-semibold dark:border-white/8 dark:bg-white/5"><I size={14} className="text-[#759450]" />{t(key as string)}</span>; })}</div></div></div></section>
+        <section id="security" className="scroll-mt-24 px-5 py-24 sm:px-8 lg:py-32"><div className="mx-auto grid max-w-[1180px] items-center gap-12 rounded-[32px] border border-black/8 bg-white/65 p-7 dark:border-white/8 dark:bg-white/[.035] md:grid-cols-[.8fr_1.2fr] sm:p-12"><div className="relative mx-auto grid size-56 place-items-center rounded-full bg-[#edf3e4] dark:bg-[#222d1c]"><div className="absolute inset-5 rounded-full border border-[#bbd09d] dark:border-[#435a32]" /><div className="absolute inset-10 rounded-full border border-[#d2e0bd] dark:border-[#344628]" /><span className="relative grid size-20 place-items-center rounded-[26px] bg-[#20211d] text-[#dff3bd] shadow-xl dark:bg-[#dff3bd] dark:text-yahro-text"><ShieldCheck size={34} /></span></div><div><p className="text-xs font-bold uppercase tracking-[.15em] text-[var(--yahro-accent-text)]">{t("secureEyebrow")}</p><h2 className="mt-4 font-[Manrope_Variable] text-3xl font-extrabold tracking-[-.05em] sm:text-4xl">{t("secureTitle")}</h2><p className="mt-4 leading-relaxed text-[var(--yahro-muted)] dark:text-[var(--yahro-muted)]">{t("secureText")}</p><div className="mt-7 flex flex-wrap gap-2">{[[LockKeyhole,"local"],[Eye,"noTracking"],[ArrowRight,"exportAnytime"]].map(([Icon,key]) => { const I=Icon as typeof LockKeyhole; return <span key={key as string} className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white px-3 py-2 text-xs font-semibold dark:border-white/8 dark:bg-white/5"><I size={14} className="text-[var(--yahro-accent-text)]" />{t(key as string)}</span>; })}</div></div></div></section>
 
         <section id="faq" className="scroll-mt-24 border-y border-black/6 bg-white/40 px-5 py-24 dark:border-white/6 dark:bg-white/[.02] sm:px-8 lg:py-32">
           <div className="mx-auto grid max-w-[1180px] gap-12 lg:grid-cols-[.75fr_1.25fr]">
-            <div><span className="grid size-11 place-items-center rounded-2xl bg-[#e7f0d9] text-[#587539] dark:bg-[#293620] dark:text-[#badb92]"><HelpCircle size={21} /></span><p className="mt-6 text-xs font-bold uppercase tracking-[.15em] text-[#759450]">{t("faqEyebrow")}</p><h2 className="mt-4 font-[Manrope_Variable] text-3xl font-extrabold tracking-[-.05em] sm:text-5xl">{t("faqTitle")}</h2><p className="mt-4 text-[var(--yahro-muted)] dark:text-[#9fa199]">{t("faqIntro")}</p></div>
-            <div className="grid gap-3">{[1,2,3,4,5].map((number) => <details key={number} className="group rounded-2xl border border-black/7 bg-[#f9f9f6] p-5 open:shadow-sm dark:border-white/8 dark:bg-white/[.035]"><summary className="cursor-pointer list-none pr-8 text-sm font-bold marker:hidden">{t(`faq${number}`)}<span className="float-right -mr-7 text-lg font-normal text-[#7c9a51] transition-transform group-open:rotate-45" aria-hidden="true">+</span></summary><p className="mt-4 border-t border-black/6 pt-4 text-sm leading-relaxed text-[var(--yahro-muted)] dark:border-white/7 dark:text-[#a5a79f]">{t(`faq${number}Answer`)}</p></details>)}</div>
+            <div><span className="grid size-11 place-items-center rounded-2xl bg-[#e7f0d9] text-[#587539] dark:bg-[#293620] dark:text-[#badb92]"><HelpCircle size={21} /></span><p className="mt-6 text-xs font-bold uppercase tracking-[.15em] text-[var(--yahro-accent-text)]">{t("faqEyebrow")}</p><h2 className="mt-4 font-[Manrope_Variable] text-3xl font-extrabold tracking-[-.05em] sm:text-5xl">{t("faqTitle")}</h2><p className="mt-4 text-[var(--yahro-muted)] dark:text-[#9fa199]">{t("faqIntro")}</p></div>
+            <div className="grid gap-3">{[1,2,3,4,5].map((number) => <details key={number} className="group rounded-2xl border border-black/7 bg-[#f9f9f6] px-5 py-3 open:shadow-sm dark:border-white/8 dark:bg-white/[.035]"><summary className="yahro-touch-target flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 text-sm font-bold marker:hidden">{t(`faq${number}`)}<span className="shrink-0 text-lg font-normal text-[var(--yahro-accent-text)] transition-transform group-open:rotate-45" aria-hidden="true">+</span></summary><p className="border-t border-black/6 pb-2 pt-4 text-sm leading-relaxed text-[var(--yahro-muted)] dark:border-white/7 dark:text-[#a5a79f]">{t(`faq${number}Answer`)}</p></details>)}</div>
           </div>
         </section>
 
         <section className="px-5 pb-24 sm:px-8"><div className="relative mx-auto max-w-[1180px] overflow-hidden rounded-[32px] bg-[#dcebc5] px-6 py-16 text-center text-[#202b13] sm:px-12"><div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(255,255,255,.8),transparent_55%)]" /><div className="relative"><CircleDollarSign className="mx-auto mb-5" size={30} /><h2 className="font-[Manrope_Variable] text-3xl font-extrabold tracking-[-.05em] sm:text-5xl">{t("ctaTitle")}</h2><p className="mx-auto mt-4 max-w-xl text-sm text-[#54633f] sm:text-base">{t("ctaText")}</p><button type="button" onClick={() => setAuthMode("signup")} className="mt-8 inline-flex h-12 items-center gap-2 rounded-xl bg-[#20211d] px-6 text-sm font-bold text-white transition-transform hover:-translate-y-0.5">{t("start")}<ArrowRight size={16} /></button></div></div></section>
       </main>
 
-      <footer className="border-t border-black/7 px-5 py-8 dark:border-white/7 sm:px-8"><div className="mx-auto flex max-w-[1180px] flex-col items-center justify-between gap-5 sm:flex-row"><div className="flex items-center gap-4"><Logo /><span className="hidden text-xs text-[var(--yahro-muted)] md:inline">{t("footer")}</span></div><div className="flex flex-wrap items-center justify-center gap-5 text-xs text-[var(--yahro-muted)]"><a href="/confidentialite" className="hover:text-current hover:underline">{t("privacy")}</a><a href="/conditions" className="hover:text-current hover:underline">{t("terms")}</a><a href="#faq" className="hover:text-current hover:underline">{t("faq")}</a><span>(c) 2026 Yahro</span></div></div></footer>
+      <footer className="border-t border-black/7 px-5 py-8 dark:border-white/7 sm:px-8"><div className="mx-auto flex max-w-[1180px] flex-col items-center justify-between gap-5 sm:flex-row"><div className="flex items-center gap-4"><Logo /><span className="hidden text-xs text-[var(--yahro-muted)] md:inline">{t("footer")}</span></div><div className="flex flex-wrap items-center justify-center gap-3 text-xs text-[var(--yahro-muted)]"><a href="/confidentialite" className="inline-flex min-h-11 items-center px-1 hover:text-current hover:underline">{t("privacy")}</a><a href="/conditions" className="inline-flex min-h-11 items-center px-1 hover:text-current hover:underline">{t("terms")}</a><a href="#faq" className="inline-flex min-h-11 items-center px-1 hover:text-current hover:underline">{t("faq")}</a><span>(c) 2026 Yahro</span></div></div></footer>
 
       {!authMode && showStickyCta && <div className="fixed inset-x-3 z-40 sm:hidden" style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}><button type="button" onClick={() => setAuthMode("signup")} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#20211d] px-5 text-sm font-bold text-white shadow-[0_14px_40px_rgba(20,21,17,.3)] dark:bg-[#e3edda] dark:text-[#1e2915]">{t("start")}<ArrowRight size={16} /></button></div>}
 

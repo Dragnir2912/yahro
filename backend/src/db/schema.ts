@@ -1,6 +1,7 @@
 import {
   boolean,
   bigint,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -14,6 +15,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const auditColumns = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -303,12 +305,13 @@ export const budgets = pgTable(
     warningThreshold: integer("warning_threshold").notNull().default(80),
     rolloverEnabled: boolean("rollover_enabled").notNull().default(false),
     notes: text("notes"),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     version: integer("version").notNull().default(1),
     ...auditColumns,
   },
   (table) => [
-    uniqueIndex("budgets_tenant_category_period_unique").on(table.tenantId, table.categoryId, table.periodStart),
-    index("budgets_tenant_period_idx").on(table.tenantId, table.periodStart),
+    uniqueIndex("budgets_tenant_category_period_unique").on(table.tenantId, table.categoryId, table.periodStart).where(sql`${table.archivedAt} is null`),
+    index("budgets_tenant_active_period_idx").on(table.tenantId, table.periodStart).where(sql`${table.archivedAt} is null`),
   ],
 );
 
@@ -340,12 +343,35 @@ export const projects = pgTable(
   ],
 );
 
+export const projectBudgetLines = pgTable(
+  "project_budget_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    ownerUserId: uuid("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 160 }).notNull(),
+    plannedAmount: money("planned_amount").notNull(),
+    notes: text("notes"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    version: integer("version").notNull().default(1),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    ...auditColumns,
+  },
+  (table) => [
+    index("project_budget_lines_project_sort_idx").on(table.projectId, table.sortOrder),
+    index("project_budget_lines_tenant_active_idx").on(table.tenantId, table.archivedAt),
+    uniqueIndex("project_budget_lines_scope_id_unique").on(table.tenantId, table.projectId, table.ownerUserId, table.id),
+  ],
+);
+
 export const projectExpenses = pgTable(
   "project_expenses",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
     projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    budgetLineId: uuid("budget_line_id"),
     ownerUserId: uuid("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     description: varchar("description", { length: 160 }).notNull(),
     amount: money("amount").notNull(),
@@ -358,7 +384,13 @@ export const projectExpenses = pgTable(
   },
   (table) => [
     index("project_expenses_project_date_idx").on(table.projectId, table.spentAt),
+    index("project_expenses_budget_line_idx").on(table.budgetLineId),
     index("project_expenses_owner_idx").on(table.ownerUserId),
+    foreignKey({
+      columns: [table.tenantId, table.projectId, table.ownerUserId, table.budgetLineId],
+      foreignColumns: [projectBudgetLines.tenantId, projectBudgetLines.projectId, projectBudgetLines.ownerUserId, projectBudgetLines.id],
+      name: "project_expenses_budget_line_scope_fk",
+    }).onDelete("cascade"),
   ],
 );
 

@@ -83,9 +83,24 @@ try {
   expectStatus(projectResponse.statusCode, 201, "project creation");
   const project = projectResponse.json<{ id: string }>();
 
+  const plannedLines = [] as Array<{ id: string; name: string }>;
+  for (const line of [
+    { name: "Transport", plannedAmount: "400", sortOrder: 0 },
+    { name: "Hébergement", plannedAmount: "600", sortOrder: 1 },
+  ]) {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/budget-lines`,
+      headers: owner.authorization,
+      payload: line,
+    });
+    expectStatus(response.statusCode, 201, `planned line ${line.name}`);
+    plannedLines.push(response.json<{ id: string; name: string }>());
+  }
+
   for (const expense of [
-    { description: "Achat en especes", amount: "100", paymentMethod: "CASH" },
-    { description: "Paiement mobile", amount: "200", paymentMethod: "MOBILE_MONEY" },
+    { description: "Achat en espèces", amount: "100", paymentMethod: "CASH", budgetLineId: plannedLines[0]!.id },
+    { description: "Paiement mobile", amount: "200", paymentMethod: "MOBILE_MONEY", budgetLineId: plannedLines[1]!.id },
   ]) {
     const response = await app.inject({
       method: "POST",
@@ -107,6 +122,13 @@ try {
   expectStatus(expenses.statusCode, 200, "expense list");
   const methods = expenses.json<{ data: Array<{ paymentMethod: string }> }>().data.map((item) => item.paymentMethod).sort();
   if (methods.join(",") !== "CASH,MOBILE_MONEY") throw new Error("payment methods were not persisted");
+
+  const budgetLines = await app.inject({ method: "GET", url: `/api/projects/${project.id}/budget-lines`, headers: owner.authorization });
+  expectStatus(budgetLines.statusCode, 200, "budget line list");
+  const trackedLines = budgetLines.json<{ data: Array<{ name: string; plannedAmount: string; actualAmount: string; lifetimeActualAmount: string }> }>().data;
+  if (trackedLines.length !== 2 || Number(trackedLines[0]?.plannedAmount) !== 400 || Number(trackedLines[0]?.actualAmount) !== 100 || Number(trackedLines[1]?.actualAmount) !== 200) {
+    throw new Error(`planned and actual budget lines are incorrect: ${JSON.stringify(trackedLines)}`);
+  }
 
   const officialConversion = await app.inject({ method: "GET", url: "/api/currencies/convert?base=EUR&quote=XOF&amount=1", headers: owner.authorization });
   expectStatus(officialConversion.statusCode, 200, "official fixed-parity conversion");
@@ -133,12 +155,15 @@ try {
   const outsider = await registerAndLogin("project-outsider");
   const forbiddenExpenses = await app.inject({ method: "GET", url: `/api/projects/${project.id}/expenses`, headers: outsider.authorization });
   expectStatus(forbiddenExpenses.statusCode, 404, "private project isolation");
+  const forbiddenBudgetLines = await app.inject({ method: "GET", url: `/api/projects/${project.id}/budget-lines`, headers: outsider.authorization });
+  expectStatus(forbiddenBudgetLines.statusCode, 404, "private budget line isolation");
   const outsiderProjects = await app.inject({ method: "GET", url: "/api/projects", headers: outsider.authorization });
   if (outsiderProjects.json<{ data: unknown[] }>().data.length !== 0) throw new Error("another user could see private projects");
 
   process.stdout.write("project_budget_frequency=ok\n");
   process.stdout.write("project_period_tracking=ok\n");
   process.stdout.write("project_payment_methods=ok\n");
+  process.stdout.write("project_planned_actual_lines=ok\n");
   process.stdout.write("project_owner_isolation=ok\n");
   process.stdout.write("custom_exchange_rate_priority=ok\n");
   process.stdout.write("official_exchange_rate_provider=ok\n");

@@ -4,6 +4,17 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme inline {
+  --color-yahro-surface: var(--yahro-surface);
+  --color-yahro-canvas: var(--yahro-canvas);
+  --color-yahro-text: var(--yahro-text);
+  --color-yahro-muted: var(--yahro-muted);
+  --color-yahro-border: var(--yahro-border);
+  --color-yahro-accent: var(--yahro-accent);
+  --color-yahro-accent-text: var(--yahro-accent-text);
+  --color-yahro-danger: var(--yahro-danger);
+}
+
 :root {
   font-family: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
   color: #171813;
@@ -15,6 +26,7 @@
   --yahro-subtle: #707269;
   --yahro-border: #deded8;
   --yahro-accent: #769450;
+  --yahro-accent-text: #4f6b30;
   --yahro-focus: #6f904b;
   --yahro-danger: #a05240;
   font-synthesis: none;
@@ -30,6 +42,8 @@ body {
   min-width: 320px;
   min-height: 100vh;
   min-height: 100dvh;
+  background: var(--yahro-canvas);
+  color: var(--yahro-text);
 }
 
 button,
@@ -65,6 +79,9 @@ select:focus-visible {
   --yahro-subtle: #b3b5ad;
   --yahro-border: rgb(255 255 255 / 0.1);
   --yahro-focus: #acd082;
+  --yahro-accent-text: #b8d793;
+  background: var(--yahro-canvas);
+  color: var(--yahro-text);
   color-scheme: dark;
 }
 
@@ -73,8 +90,39 @@ select:focus-visible {
   min-height: 44px;
 }
 
+.yahro-money {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
+}
+
+.yahro-skip-link {
+  position: fixed;
+  left: 1rem;
+  top: max(1rem, env(safe-area-inset-top));
+  z-index: 200;
+  transform: translateY(-180%);
+  border-radius: 0.75rem;
+  background: var(--yahro-text);
+  color: var(--yahro-surface);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.yahro-skip-link:focus {
+  transform: translateY(0);
+}
+
 .yahro-safe-bottom {
   padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+}
+
+.yahro-scrollbar-hidden {
+  scrollbar-width: none;
+}
+
+.yahro-scrollbar-hidden::-webkit-scrollbar {
+  display: none;
 }
 
 .field {
@@ -101,10 +149,19 @@ select:focus-visible {
   }
 }
 
-@media (max-width: 1023px) {
+@media (pointer: coarse) {
   .yahro-touch-target {
     min-width: 48px;
     min-height: 48px;
+  }
+
+  nav[aria-label="Main navigation"] > button,
+  aside nav > button {
+    min-height: 48px;
+  }
+
+  .yahro-hover-action {
+    opacity: 1;
   }
 }
 
@@ -119,6 +176,29 @@ select:focus-visible {
 @media (max-height: 760px) and (min-width: 1024px) {
   .sidebar-promo {
     display: none;
+  }
+}
+
+@media (max-height: 460px) and (orientation: landscape) {
+  .yahro-app-header {
+    min-height: 52px;
+    padding-top: env(safe-area-inset-top);
+  }
+
+  nav[aria-label="Navigation mobile"],
+  nav[aria-label="Mobile navigation"] {
+    min-height: 52px;
+    background-color: #ffffff;
+  }
+
+  nav[aria-label="Navigation mobile"] button span,
+  nav[aria-label="Mobile navigation"] button span {
+    display: none;
+  }
+
+  .dark nav[aria-label="Navigation mobile"],
+  .dark nav[aria-label="Mobile navigation"] {
+    background-color: #20211d;
   }
 }
 

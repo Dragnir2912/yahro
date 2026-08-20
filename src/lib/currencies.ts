@@ -1,5 +1,7 @@
 export type CurrencyLanguage = "fr" | "en";
 
+const zeroDecimalCurrencies = new Set(["XOF", "XAF", "JPY", "GNF", "CDF"]);
+
 export const supportedCurrencies = [
   "XOF",
   "XAF",
@@ -38,4 +40,25 @@ const names: Record<(typeof supportedCurrencies)[number], Record<CurrencyLanguag
 
 export function currencyName(code: string, language: CurrencyLanguage) {
   return names[code as keyof typeof names]?.[language] ?? code;
+}
+
+export function currencyFractionDigits(code: string) {
+  return zeroDecimalCurrencies.has(code) ? 0 : 2;
+}
+
+export function formatCurrencyAmount(value: string | number, code: string, language: CurrencyLanguage) {
+  const fractionDigits = currencyFractionDigits(code);
+  return new Intl.NumberFormat(language === "fr" ? "fr-FR" : "en-US", {
+    style: "currency",
+    currency: code,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(Number(value));
+}
+
+export function normalizeCurrencyAmount(value: string, code: string) {
+  const normalized = value.trim().replace(",", ".");
+  const numeric = Number(normalized);
+  if (!Number.isFinite(numeric)) return null;
+  return numeric.toFixed(currencyFractionDigits(code));
 }

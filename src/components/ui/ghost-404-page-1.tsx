@@ -59,7 +59,7 @@ export default function Ghost404Page({ onHome }: Ghost404PageProps) {
   };
 
   return (
-    <main className="relative grid min-h-screen min-h-[100dvh] overflow-hidden bg-[#f7f7f3] px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-[calc(2rem+env(safe-area-inset-top))] text-[#20211d] transition-colors dark:bg-[#080a07] dark:text-[#f1f2ec] sm:px-8">
+    <main className="relative grid min-h-screen min-h-[100dvh] overflow-hidden bg-[#f7f7f3] px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-[calc(2rem+env(safe-area-inset-top))] text-yahro-text transition-colors dark:bg-[#080a07] dark:text-[#f1f2ec] sm:px-8">
       <div className="pointer-events-none absolute left-1/2 top-1/2 size-[min(80vw,640px)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(173,204,132,.22),transparent_65%)] blur-3xl dark:opacity-40" />
 
       <header className="relative z-10 flex h-12 items-center justify-between lg:h-11">

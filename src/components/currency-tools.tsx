@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowRightLeft, Banknote, RefreshCw, Save, Trash2 } from "lucide-react";
+import { Archive, ArrowRightLeft, Banknote, RefreshCw, Save } from "lucide-react";
 import { api, ApiError, type CustomExchangeRate } from "@/lib/api";
-import { currencyName, supportedCurrencies } from "@/lib/currencies";
+import { currencyFractionDigits, currencyName, supportedCurrencies } from "@/lib/currencies";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 type Language = "fr" | "en";
 
@@ -24,6 +25,7 @@ export default function CurrencyTools({ accessToken, language, defaultCurrency, 
   const [customLabel, setCustomLabel] = useState("");
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<{ error: boolean; text: string } | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<CustomExchangeRate>();
 
   useEffect(() => {
     let active = true;
@@ -51,7 +53,7 @@ export default function CurrencyTools({ accessToken, language, defaultCurrency, 
     try {
       await api.updateProfile(accessToken, { defaultCurrency: profileCurrency });
       onDefaultCurrencyChange(profileCurrency);
-      setNotice({ error: false, text: language === "fr" ? "Devise principale mise a jour." : "Main currency updated." });
+      setNotice({ error: false, text: language === "fr" ? "Devise principale mise à jour." : "Main currency updated." });
     } catch (error) {
       setNotice({ error: true, text: messageFor(error, language) });
     } finally {
@@ -81,6 +83,7 @@ export default function CurrencyTools({ accessToken, language, defaultCurrency, 
     try {
       await api.archiveCustomExchangeRate(accessToken, rate.id);
       setCustomRates((current) => current.filter((item) => item.id !== rate.id));
+      setArchiveTarget(undefined);
     } catch (error) {
       setNotice({ error: true, text: messageFor(error, language) });
     } finally {
@@ -89,7 +92,7 @@ export default function CurrencyTools({ accessToken, language, defaultCurrency, 
   };
 
   return (
-    <section className="mb-5 rounded-2xl border border-[#e1e1dc] bg-white p-5 dark:border-white/8 dark:bg-[#20211d] sm:p-6">
+    <section className="mb-5 rounded-2xl border border-yahro-border bg-white p-5 dark:border-white/8 dark:bg-[#20211d] sm:p-6">
       <div className="mb-5 flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#e7f0da] text-[#5b7839] dark:bg-[#2c3b22] dark:text-[#b8d793]"><ArrowRightLeft size={18} /></span><div><h2 className="font-[Manrope_Variable] font-bold">{language === "fr" ? "Devises et taux de change" : "Currencies and exchange rates"}</h2><p className="mt-1 text-xs leading-relaxed text-[var(--yahro-muted)] dark:text-[var(--yahro-muted)]">{language === "fr" ? "Taux de référence datés, avec priorité explicite aux taux personnalisés." : "Dated reference rates, with explicit priority given to custom rates."}</p></div></div>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -101,7 +104,7 @@ export default function CurrencyTools({ accessToken, language, defaultCurrency, 
 
         <form onSubmit={convert} className="rounded-2xl bg-[#f5f6f1] p-4 dark:bg-[#191a16]">
           <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><RefreshCw size={16} />{language === "fr" ? "Convertisseur" : "Converter"}</h3>
-          <div className="grid gap-2 sm:grid-cols-3"><input required inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} className="field" /><select value={base} onChange={(event) => setBase(event.target.value)} className="field">{supportedCurrencies.map((currency) => <option key={currency} value={currency}>{currencyName(currency, language)}</option>)}</select><select value={quote} onChange={(event) => setQuote(event.target.value)} className="field">{supportedCurrencies.map((currency) => <option key={currency} value={currency}>{currencyName(currency, language)}</option>)}</select></div>
+          <div className="grid gap-2 sm:grid-cols-3"><input required inputMode="decimal" pattern="[0-9]+([.,][0-9]+)?" value={amount} onChange={(event) => setAmount(currencyFractionDigits(base) === 0 ? event.target.value.replace(/\D/g, "") : event.target.value.replace(",", ".").replace(/[^0-9.]/g, ""))} className="field" /><select value={base} onChange={(event) => setBase(event.target.value)} className="field">{supportedCurrencies.map((currency) => <option key={currency} value={currency}>{currencyName(currency, language)}</option>)}</select><select value={quote} onChange={(event) => setQuote(event.target.value)} className="field">{supportedCurrencies.map((currency) => <option key={currency} value={currency}>{currencyName(currency, language)}</option>)}</select></div>
           <button disabled={pending || base === quote} type="submit" className="mt-3 h-10 w-full rounded-xl bg-[#e1eccf] text-xs font-bold text-[#49632e] disabled:opacity-40 dark:bg-[#2d3b24] dark:text-[#c8e0a9]">{language === "fr" ? "Convertir" : "Convert"}</button>
           {result && <div className="mt-3 rounded-xl bg-white px-3 py-3 dark:bg-white/5"><p className="font-[Manrope_Variable] text-lg font-extrabold">{new Intl.NumberFormat(language === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 4 }).format(Number(result.convertedAmount))} {currencyName(quote, language)}</p><p className="mt-1 text-[10px] text-[var(--yahro-muted)]">1 {currencyName(base, language)} = {Number(result.rate).toPrecision(8)} {currencyName(quote, language)} - {result.custom ? (language === "fr" ? "Taux personnalisé" : "Custom rate") : result.source} - {new Date(result.rateDate).toLocaleDateString(language === "fr" ? "fr-FR" : "en-US")}</p></div>}
         </form>
@@ -114,7 +117,8 @@ export default function CurrencyTools({ accessToken, language, defaultCurrency, 
       </form>
 
       {notice && <p role="status" className={`mt-3 rounded-xl px-3 py-2 text-xs ${notice.error ? "bg-[#f8e9e5] text-[#a6503f] dark:bg-[#402824] dark:text-[#eda18f]" : "bg-[#e8f1da] text-[#4f6b30] dark:bg-[#293820] dark:text-[#bddc97]"}`}>{notice.text}</p>}
-      {customRates.length > 0 && <div className="mt-4 space-y-2">{customRates.map((rate) => <div key={rate.id} className="flex items-center justify-between gap-3 rounded-xl bg-[#f5f6f1] px-3 py-2.5 dark:bg-[#191a16]"><div><p className="text-xs font-bold">1 {currencyName(rate.baseCurrency, language)} = {rate.rate} {currencyName(rate.quoteCurrency, language)}</p><p className="mt-0.5 text-[10px] text-[var(--yahro-muted)]">{rate.label || (language === "fr" ? "Taux personnalisé" : "Custom rate")}</p></div><button type="button" disabled={pending} onClick={() => { if (window.confirm(language === "fr" ? "Supprimer ce taux personnalisé ?" : "Delete this custom rate?")) void archiveRate(rate); }} className="yahro-touch-target grid size-12 place-items-center rounded-xl text-[#a15a4a] hover:bg-[#f3e4df] lg:size-10 dark:hover:bg-[#3b2925]" aria-label={language === "fr" ? "Supprimer" : "Delete"}><Trash2 size={15} /></button></div>)}</div>}
+      {customRates.length > 0 && <div className="mt-4 space-y-2">{customRates.map((rate) => <div key={rate.id} className="flex items-center justify-between gap-3 rounded-xl bg-[#f5f6f1] px-3 py-2.5 dark:bg-[#191a16]"><div><p className="text-xs font-bold">1 {currencyName(rate.baseCurrency, language)} = {rate.rate} {currencyName(rate.quoteCurrency, language)}</p><p className="mt-0.5 text-[10px] text-[var(--yahro-muted)]">{rate.label || (language === "fr" ? "Taux personnalisé" : "Custom rate")}</p></div><button type="button" disabled={pending} onClick={() => setArchiveTarget(rate)} className="yahro-touch-target grid size-12 place-items-center rounded-xl text-[#a15a4a] hover:bg-[#f3e4df] lg:size-10 dark:hover:bg-[#3b2925]" aria-label={language === "fr" ? "Archiver" : "Archive"}><Archive size={15} /></button></div>)}</div>}
+      <ConfirmDialog open={Boolean(archiveTarget)} title={language === "fr" ? "Archiver ce taux personnalisé ?" : "Archive this custom rate?"} description={language === "fr" ? "Le taux officiel sera de nouveau utilisé pour cette paire de devises." : "The official rate will be used again for this currency pair."} confirmLabel={language === "fr" ? "Archiver" : "Archive"} cancelLabel={language === "fr" ? "Annuler" : "Cancel"} pending={pending} onClose={() => setArchiveTarget(undefined)} onConfirm={async () => { if (archiveTarget) await archiveRate(archiveTarget); }} />
     </section>
   );
 }

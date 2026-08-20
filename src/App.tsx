@@ -3,7 +3,7 @@ import AccountActionPage from "@/components/account-action-page";
 import LegalPage from "@/components/legal-page";
 import LandingPage, { type LandingLanguage } from "@/components/landing-page";
 import Ghost404Page from "@/components/ui/ghost-404-page-1";
-import { api, type AuthResult } from "@/lib/api";
+import { api, ApiError, onUnauthorized, type AuthResult } from "@/lib/api";
 import { setPageMetadata } from "@/lib/page-metadata";
 import type { ProfileUser } from "@/components/profile-settings";
 
@@ -11,7 +11,7 @@ const BudgetDashboard = lazy(() => import("@/components/ui/saa-s-template"));
 
 type Session =
   | { kind: "demo"; language: LandingLanguage }
-  | { kind: "authenticated"; language: LandingLanguage; accessToken: string; user: AuthResult["user"] };
+  | { kind: "authenticated"; language: LandingLanguage; accessToken: string; accessTokenExpiresAt: number; user: AuthResult["user"] };
 
 function currentLanguage(): LandingLanguage {
   return window.localStorage.getItem("yahro-language") === "en" ? "en" : "fr";
@@ -46,11 +46,11 @@ export default function App() {
     let active = true;
     api
       .refresh()
-      .then(async ({ accessToken }) => {
+      .then(async ({ accessToken, expiresIn }) => {
         const profile = await api.me(accessToken);
         if (active) {
           const language = profile.user.locale === "en" ? "en" : "fr";
-          setSession({ kind: "authenticated", language, accessToken, user: profile.user });
+          setSession({ kind: "authenticated", language, accessToken, accessTokenExpiresAt: Date.now() + expiresIn * 1000, user: profile.user });
         }
       })
       .catch(() => undefined)
@@ -59,6 +59,43 @@ export default function App() {
       active = false;
     };
   }, [accountAction, path]);
+
+  const authenticatedSession = session?.kind === "authenticated" ? session : null;
+  useEffect(() => {
+    if (!authenticatedSession) return;
+    let active = true;
+
+    const renew = async () => {
+      try {
+        const result = await api.refresh();
+        if (!active) return;
+        setSession((current) => current?.kind === "authenticated" ? {
+          ...current,
+          accessToken: result.accessToken,
+          accessTokenExpiresAt: Date.now() + result.expiresIn * 1000,
+        } : current);
+      } catch (error) {
+        if (active && error instanceof ApiError && error.status === 401) setSession(null);
+      }
+    };
+
+    const delay = Math.max(15_000, authenticatedSession.accessTokenExpiresAt - Date.now() - 3 * 60 * 1000);
+    const timer = window.setTimeout(() => { void renew(); }, delay);
+    const stopUnauthorized = onUnauthorized(() => { void renew(); });
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && authenticatedSession.accessTokenExpiresAt - Date.now() < 3 * 60 * 1000) {
+        void renew();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+      stopUnauthorized();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [authenticatedSession]);
 
   useEffect(() => {
     if (path !== "/" || !session) return;
@@ -109,7 +146,7 @@ export default function App() {
     return (
       <LandingPage
         onDemo={(language) => setSession({ kind: "demo", language })}
-        onAuthenticated={(language, result) => setSession({ kind: "authenticated", language, accessToken: result.accessToken, user: result.user })}
+        onAuthenticated={(language, result) => setSession({ kind: "authenticated", language, accessToken: result.accessToken, accessTokenExpiresAt: Date.now() + result.expiresIn * 1000, user: result.user })}
       />
     );
   }

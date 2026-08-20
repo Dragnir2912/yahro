@@ -2,7 +2,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
-import { auditLogs, projectExpenses, projects } from "../db/schema.js";
+import { auditLogs, projectBudgetLines, projectExpenses, projects } from "../db/schema.js";
 import { conflict, notFound } from "../lib/errors.js";
 import type { AuthContext } from "../security/authentication.js";
 import { requireRole } from "../security/authorization.js";
@@ -61,12 +61,27 @@ const projectUpdateSchema = z
 
 const expenseCreateSchema = z
   .object({
+    budgetLineId: uuidSchema.nullable().optional(),
     description: z.string().trim().min(1).max(160),
     amount: positiveMoneySchema,
     paymentMethod: paymentMethodSchema,
     spentAt: z.coerce.date(),
     notes: z.string().trim().max(2000).optional(),
   })
+  .strict();
+
+const budgetLineCreateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160),
+    plannedAmount: positiveMoneySchema,
+    notes: z.string().trim().max(2000).optional(),
+    sortOrder: z.number().int().min(0).max(10000).default(0),
+  })
+  .strict();
+
+const budgetLineUpdateSchema = budgetLineCreateSchema
+  .partial()
+  .extend({ version: z.number().int().positive() })
   .strict();
 
 const expenseUpdateSchema = expenseCreateSchema
@@ -80,6 +95,10 @@ function projectId(request: FastifyRequest) {
 
 function expenseIds(request: FastifyRequest) {
   return parseBody(z.object({ projectId: uuidSchema, expenseId: uuidSchema }).strict(), request.params);
+}
+
+function budgetLineIds(request: FastifyRequest) {
+  return parseBody(z.object({ projectId: uuidSchema, lineId: uuidSchema }).strict(), request.params);
 }
 
 function auditValues(request: FastifyRequest, auth: AuthContext, action: string, entityType: string, entityId: string) {
@@ -242,6 +261,132 @@ export async function registerProjectRoutes(app: FastifyInstance, dependencies: 
     return reply.code(204).send();
   });
 
+  app.get("/api/projects/:id/budget-lines", async (request) => {
+    const auth = await authenticate(request);
+    const id = projectId(request);
+
+    return database.withSecurityContext(auth, async (transaction) => {
+      const [project] = await transaction
+        .select({
+          id: projects.id,
+          periodStart: sql<string>`private.project_budget_period_start(${projects.budgetFrequency}, ${projects.startDate}, now())::text`,
+          periodEnd: sql<string>`private.project_budget_period_end(${projects.budgetFrequency}, ${projects.startDate}, ${projects.endDate}, now())::text`,
+        })
+        .from(projects)
+        .where(and(eq(projects.id, id), eq(projects.tenantId, auth.tenantId), eq(projects.ownerUserId, auth.userId), isNull(projects.archivedAt)))
+        .limit(1);
+      if (!project) throw notFound();
+
+      const currentPeriod = sql<boolean>`(
+        ${projectExpenses.spentAt} >= ${project.periodStart}
+        and ${projectExpenses.spentAt} < ${project.periodEnd}
+      )`;
+      const rows = await transaction
+        .select({
+          id: projectBudgetLines.id,
+          projectId: projectBudgetLines.projectId,
+          name: projectBudgetLines.name,
+          plannedAmount: projectBudgetLines.plannedAmount,
+          notes: projectBudgetLines.notes,
+          sortOrder: projectBudgetLines.sortOrder,
+          version: projectBudgetLines.version,
+          createdAt: projectBudgetLines.createdAt,
+          updatedAt: projectBudgetLines.updatedAt,
+          actualAmount: sql<string>`coalesce(sum(case when ${currentPeriod} then ${projectExpenses.amount} else 0 end), 0)::text`,
+          lifetimeActualAmount: sql<string>`coalesce(sum(${projectExpenses.amount}), 0)::text`,
+          expenseCount: sql<number>`count(${projectExpenses.id})::integer`,
+        })
+        .from(projectBudgetLines)
+        .leftJoin(projectExpenses, and(
+          eq(projectExpenses.budgetLineId, projectBudgetLines.id),
+          eq(projectExpenses.tenantId, auth.tenantId),
+          eq(projectExpenses.ownerUserId, auth.userId),
+          isNull(projectExpenses.deletedAt),
+        ))
+        .where(and(
+          eq(projectBudgetLines.projectId, id),
+          eq(projectBudgetLines.tenantId, auth.tenantId),
+          eq(projectBudgetLines.ownerUserId, auth.userId),
+          isNull(projectBudgetLines.archivedAt),
+        ))
+        .groupBy(projectBudgetLines.id)
+        .orderBy(projectBudgetLines.sortOrder, projectBudgetLines.createdAt);
+      return { data: rows };
+    });
+  });
+
+  app.post("/api/projects/:id/budget-lines", async (request, reply) => {
+    const auth = await authenticate(request);
+    requireRole(auth.role, "MEMBER");
+    const id = projectId(request);
+    const input = parseBody(budgetLineCreateSchema, request.body);
+
+    return database.withSecurityContext(auth, async (transaction) => {
+      const [project] = await transaction
+        .select({ id: projects.id })
+        .from(projects)
+        .where(and(eq(projects.id, id), eq(projects.tenantId, auth.tenantId), eq(projects.ownerUserId, auth.userId), isNull(projects.archivedAt)))
+        .limit(1);
+      if (!project) throw notFound();
+      const [created] = await transaction
+        .insert(projectBudgetLines)
+        .values({ tenantId: auth.tenantId, projectId: id, ownerUserId: auth.userId, ...input })
+        .returning();
+      if (!created) throw new Error("Project budget line creation failed");
+      await transaction.insert(auditLogs).values(auditValues(request, auth, "PROJECT_BUDGET_LINE_CREATED", "project_budget_line", created.id));
+      return reply.code(201).send({ ...created, actualAmount: "0", lifetimeActualAmount: "0", expenseCount: 0 });
+    });
+  });
+
+  app.patch("/api/projects/:projectId/budget-lines/:lineId", async (request) => {
+    const auth = await authenticate(request);
+    requireRole(auth.role, "MEMBER");
+    const { projectId: id, lineId } = budgetLineIds(request);
+    const input = parseBody(budgetLineUpdateSchema, request.body);
+    const { version, ...changes } = input;
+
+    return database.withSecurityContext(auth, async (transaction) => {
+      const [updated] = await transaction
+        .update(projectBudgetLines)
+        .set({ ...changes, version: sql`${projectBudgetLines.version} + 1` })
+        .where(and(
+          eq(projectBudgetLines.id, lineId),
+          eq(projectBudgetLines.projectId, id),
+          eq(projectBudgetLines.tenantId, auth.tenantId),
+          eq(projectBudgetLines.ownerUserId, auth.userId),
+          eq(projectBudgetLines.version, version),
+          isNull(projectBudgetLines.archivedAt),
+        ))
+        .returning();
+      if (!updated) throw conflict("VERSION_CONFLICT");
+      await transaction.insert(auditLogs).values(auditValues(request, auth, "PROJECT_BUDGET_LINE_UPDATED", "project_budget_line", lineId));
+      return updated;
+    });
+  });
+
+  app.delete("/api/projects/:projectId/budget-lines/:lineId", async (request, reply) => {
+    const auth = await authenticate(request);
+    requireRole(auth.role, "MEMBER");
+    const { projectId: id, lineId } = budgetLineIds(request);
+
+    await database.withSecurityContext(auth, async (transaction) => {
+      const [archived] = await transaction
+        .update(projectBudgetLines)
+        .set({ archivedAt: new Date(), version: sql`${projectBudgetLines.version} + 1` })
+        .where(and(
+          eq(projectBudgetLines.id, lineId),
+          eq(projectBudgetLines.projectId, id),
+          eq(projectBudgetLines.tenantId, auth.tenantId),
+          eq(projectBudgetLines.ownerUserId, auth.userId),
+          isNull(projectBudgetLines.archivedAt),
+        ))
+        .returning({ id: projectBudgetLines.id });
+      if (!archived) throw notFound();
+      await transaction.insert(auditLogs).values(auditValues(request, auth, "PROJECT_BUDGET_LINE_ARCHIVED", "project_budget_line", lineId));
+    });
+    return reply.code(204).send();
+  });
+
   app.get("/api/projects/:id/expenses", async (request) => {
     const auth = await authenticate(request);
     const id = projectId(request);
@@ -257,6 +402,7 @@ export async function registerProjectRoutes(app: FastifyInstance, dependencies: 
         data: await transaction
           .select({
             id: projectExpenses.id,
+            budgetLineId: projectExpenses.budgetLineId,
             description: projectExpenses.description,
             amount: projectExpenses.amount,
             paymentMethod: projectExpenses.paymentMethod,
@@ -290,6 +436,20 @@ export async function registerProjectRoutes(app: FastifyInstance, dependencies: 
         .where(and(eq(projects.id, id), eq(projects.tenantId, auth.tenantId), eq(projects.ownerUserId, auth.userId), isNull(projects.archivedAt)))
         .limit(1);
       if (!project) throw notFound();
+      if (input.budgetLineId) {
+        const [line] = await transaction
+          .select({ id: projectBudgetLines.id })
+          .from(projectBudgetLines)
+          .where(and(
+            eq(projectBudgetLines.id, input.budgetLineId),
+            eq(projectBudgetLines.projectId, id),
+            eq(projectBudgetLines.tenantId, auth.tenantId),
+            eq(projectBudgetLines.ownerUserId, auth.userId),
+            isNull(projectBudgetLines.archivedAt),
+          ))
+          .limit(1);
+        if (!line) throw notFound();
+      }
       if (input.spentAt < project.startDate || (project.endDate && input.spentAt > project.endDate)) {
         const error = new Error("Invalid request data") as Error & { statusCode?: number; code?: string };
         error.statusCode = 422;
@@ -314,6 +474,20 @@ export async function registerProjectRoutes(app: FastifyInstance, dependencies: 
     const { version, ...changes } = input;
 
     return database.withSecurityContext(auth, async (transaction) => {
+      if (changes.budgetLineId) {
+        const [line] = await transaction
+          .select({ id: projectBudgetLines.id })
+          .from(projectBudgetLines)
+          .where(and(
+            eq(projectBudgetLines.id, changes.budgetLineId),
+            eq(projectBudgetLines.projectId, id),
+            eq(projectBudgetLines.tenantId, auth.tenantId),
+            eq(projectBudgetLines.ownerUserId, auth.userId),
+            isNull(projectBudgetLines.archivedAt),
+          ))
+          .limit(1);
+        if (!line) throw notFound();
+      }
       const [updated] = await transaction
         .update(projectExpenses)
         .set({ ...changes, version: sql`${projectExpenses.version} + 1` })

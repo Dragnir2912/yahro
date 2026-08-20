@@ -85,6 +85,8 @@ services:
         sync: false
       - key: LOG_LEVEL
         value: info
+      - key: REFRESH_REUSE_GRACE_SECONDS
+        value: "5"
 
 databases:
   - name: yahro-postgres-staging
