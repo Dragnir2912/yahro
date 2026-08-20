@@ -1,0 +1,48 @@
+{
+  "name": "@yahro/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.scripts.json",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:e2e:mfa": "tsx scripts/verify-mfa-e2e.ts",
+    "test:e2e:projects": "tsx scripts/verify-projects-e2e.ts",
+    "test:e2e:categories": "tsx scripts/verify-categories-e2e.ts",
+    "test:watch": "vitest",
+    "db:bootstrap": "tsx scripts/bootstrap-runtime-role.ts",
+    "db:prepare": "npm run db:bootstrap && npm run db:migrate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "security:audit": "npm audit --omit=dev"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.1.2",
+    "@fastify/cors": "11.3.0",
+    "@fastify/helmet": "13.1.1",
+    "@fastify/multipart": "10.1.1",
+    "@fastify/rate-limit": "11.2.0",
+    "@node-rs/argon2": "2.1.0",
+    "csv-parse": "7.0.2",
+    "dotenv": "17.4.2",
+    "drizzle-orm": "0.45.2",
+    "fastify": "5.12.1",
+    "file-type": "22.0.2",
+    "jose": "6.2.9",
+    "nodemailer": "9.0.5",
+    "postgres": "3.4.9",
+    "ulid": "3.0.2",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "@types/nodemailer": "8.0.1",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}

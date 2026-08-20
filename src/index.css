@@ -1,0 +1,173 @@
+@import "tailwindcss";
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource-variable/manrope";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  font-family: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  color: #171813;
+  background: #f5f5f1;
+  --yahro-surface: #ffffff;
+  --yahro-canvas: #f7f7f3;
+  --yahro-text: #20211d;
+  --yahro-muted: #686a62;
+  --yahro-subtle: #707269;
+  --yahro-border: #deded8;
+  --yahro-accent: #769450;
+  --yahro-focus: #6f904b;
+  --yahro-danger: #a05240;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #7c9a51;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #dceac4;
+  color: #20300f;
+}
+
+.dark {
+  --yahro-surface: #20211d;
+  --yahro-canvas: #080a07;
+  --yahro-text: #f4f4ef;
+  --yahro-muted: #a4a69d;
+  --yahro-subtle: #b3b5ad;
+  --yahro-border: rgb(255 255 255 / 0.1);
+  --yahro-focus: #acd082;
+  color-scheme: dark;
+}
+
+.yahro-touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.yahro-safe-bottom {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+}
+
+.field {
+  min-height: 48px;
+  width: 100%;
+  border: 1px solid var(--yahro-border);
+  border-radius: 0.75rem;
+  background: var(--yahro-surface);
+  color: var(--yahro-text);
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.field:focus-visible {
+  outline: 2px solid var(--yahro-focus);
+  outline-offset: 2px;
+}
+
+@media (min-width: 640px) {
+  .field {
+    min-height: 44px;
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  .yahro-touch-target {
+    min-width: 48px;
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 639px) {
+  [role="dialog"] input,
+  [role="dialog"] select,
+  [role="dialog"] textarea {
+    font-size: 16px;
+  }
+}
+
+@media (max-height: 760px) and (min-width: 1024px) {
+  .sidebar-promo {
+    display: none;
+  }
+}
+
+.dark ::selection {
+  background: #566d37;
+  color: white;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes soft-pop {
+  0% { opacity: 0; transform: scale(.98); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes ghost-float {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-12px) rotate(1deg); }
+}
+
+@keyframes ghost-shadow {
+  0%, 100% { transform: scaleX(1); opacity: .75; }
+  50% { transform: scaleX(.72); opacity: .4; }
+}
+
+.animate-fade-up {
+  animation: fade-up .45s ease-out both;
+}
+
+.animate-soft-pop {
+  animation: soft-pop .2s ease-out both;
+}
+
+.animate-ghost-float {
+  animation: ghost-float 3.2s ease-in-out infinite;
+}
+
+.animate-ghost-shadow {
+  animation: ghost-shadow 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

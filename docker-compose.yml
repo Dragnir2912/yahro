@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-yahro}
+      POSTGRES_USER: ${POSTGRES_OWNER_USER:-yahro_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?Set POSTGRES_OWNER_PASSWORD in .env}
+      YAHRO_APP_PASSWORD: ${YAHRO_APP_PASSWORD:?Set YAHRO_APP_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - yahro_postgres_data:/var/lib/postgresql/data
+      - ./backend/scripts/docker-init.sh:/docker-entrypoint-initdb.d/00-yahro-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_OWNER_USER:-yahro_owner} -d ${POSTGRES_DB:-yahro}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  yahro_postgres_data:

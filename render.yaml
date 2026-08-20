@@ -1,0 +1,103 @@
+services:
+  - type: web
+    runtime: static
+    name: yahro-web
+    buildCommand: npm ci --include=dev && npm run build
+    staticPublishPath: ./dist
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: 24.16.0
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https:; upgrade-insecure-requests"
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+
+  - type: web
+    runtime: node
+    name: yahro-api
+    rootDir: backend
+    region: frankfurt
+    plan: starter
+    numInstances: 1
+    buildCommand: npm ci --include=dev && npm run build
+    preDeployCommand: npm run db:prepare
+    startCommand: npm start
+    healthCheckPath: /health/ready
+    maxShutdownDelaySeconds: 30
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: 24.16.0
+      - key: NODE_ENV
+        value: production
+      - key: DEPLOYMENT_PLATFORM
+        value: render
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_MIGRATION_URL
+        fromDatabase:
+          name: yahro-postgres
+          property: connectionString
+      - key: YAHRO_APP_PASSWORD
+        generateValue: true
+      - key: JWT_SECRET
+        sync: false
+      - key: TOKEN_HASH_PEPPER
+        sync: false
+      - key: MFA_ENCRYPTION_KEY
+        sync: false
+      - key: APP_ORIGIN
+        sync: false
+      - key: PUBLIC_API_ORIGIN
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+      - key: MAX_UPLOAD_BYTES
+        value: "5242880"
+      - key: MAX_CSV_ROWS
+        value: "10000"
+
+databases:
+  - name: yahro-postgres
+    databaseName: yahro
+    user: yahro_owner
+    postgresMajorVersion: "17"
+    region: frankfurt
+    plan: basic-1gb
+    diskSizeGB: 15
+    connectionPool: none
+    ipAllowList: []

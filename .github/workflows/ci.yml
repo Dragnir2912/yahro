@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run security:tracked-files
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  backend-unit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  backend-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: yahro_e2e
+          POSTGRES_USER: yahro_owner
+          POSTGRES_PASSWORD: ci-owner-password-not-for-production
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U yahro_owner -d yahro_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      DEPLOYMENT_PLATFORM: local
+      HOST: 127.0.0.1
+      PORT: 4000
+      DATABASE_MIGRATION_URL: postgresql://yahro_owner:ci-owner-password-not-for-production@127.0.0.1:5432/yahro_e2e
+      DATABASE_URL: postgresql://yahro_app:ci-runtime-password-not-for-production@127.0.0.1:5432/yahro_e2e
+      YAHRO_APP_PASSWORD: ci-runtime-password-not-for-production
+      JWT_SECRET: jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+      TOKEN_HASH_PEPPER: pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp
+      MFA_ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc
+      APP_ORIGIN: http://127.0.0.1:5173
+      PUBLIC_API_ORIGIN: http://127.0.0.1:4000
+      DEV_EMAIL_CAPTURE_DIR: .dev-mail
+      LOG_LEVEL: silent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run db:prepare
+      - run: npm run test:e2e:mfa
+      - run: npm run test:e2e:projects
+      - run: npm run test:e2e:categories

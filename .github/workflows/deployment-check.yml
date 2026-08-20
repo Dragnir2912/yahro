@@ -1,0 +1,30 @@
+name: Deployment check
+
+on:
+  workflow_dispatch:
+    inputs:
+      frontend_url:
+        description: Public frontend URL
+        required: true
+        type: string
+      api_url:
+        description: Public API URL
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify public deployment
+        env:
+          DEPLOYMENT_FRONTEND_URL: ${{ inputs.frontend_url }}
+          DEPLOYMENT_API_URL: ${{ inputs.api_url }}
+        run: npm run verify:deployment
