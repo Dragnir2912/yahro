@@ -20,7 +20,7 @@ try {
     ? "alter role yahro_app login password %L nosuperuser nocreatedb nocreaterole noinherit nobypassrls"
     : "create role yahro_app login password %L nosuperuser nocreatedb nocreaterole noinherit nobypassrls";
   const [formatted] = await sql<{ command: string }[]>`
-    select format(${commandTemplate}, ${applicationPassword}) as command
+    select format(${commandTemplate}::text, ${applicationPassword}::text) as command
   `;
   if (!formatted?.command) throw new Error("Unable to prepare the runtime role command");
   await sql.unsafe(formatted.command);

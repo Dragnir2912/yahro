@@ -12,7 +12,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.config.ts",
     "secrets:generate": "node scripts/generate-production-secrets.mjs",
     "security:tracked-files": "node scripts/check-tracked-secrets.mjs",
     "verify:deployment": "node scripts/verify-deployment.mjs"

@@ -10,7 +10,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.scripts.json",
     "start": "node dist/server.js",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.config.ts",
     "test:e2e:mfa": "tsx scripts/verify-mfa-e2e.ts",
     "test:e2e:projects": "tsx scripts/verify-projects-e2e.ts",
     "test:e2e:categories": "tsx scripts/verify-categories-e2e.ts",
