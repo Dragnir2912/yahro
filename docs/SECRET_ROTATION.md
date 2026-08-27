@@ -20,12 +20,16 @@ Copier directement les quatre valeurs dans le gestionnaire de secrets Render. Ne
 
 ## Mot de passe `yahro_app`
 
-1. Générer une nouvelle valeur `YAHRO_APP_PASSWORD`.
-2. Activer le mode maintenance.
-3. Remplacer la valeur dans Render.
-4. Lancer manuellement un déploiement. `db:bootstrap` applique le mot de passe au rôle avant le démarrage de la nouvelle API.
+Sur Neon, le propriétaire de la base peut créer `yahro_app` sans nécessairement être autorisé à le modifier ensuite. La rotation doit donc être initiée dans Neon:
+
+1. Activer le mode maintenance.
+2. Dans Neon, ouvrir la gestion des rôles et réinitialiser le mot de passe de `yahro_app`.
+3. Copier immédiatement ce nouveau mot de passe dans `YAHRO_APP_PASSWORD` sur Render.
+4. Lancer manuellement un déploiement. `db:bootstrap` vérifie alors les restrictions du rôle et sa connexion réelle avant de démarrer l'API.
 5. Vérifier la santé et une requête authentifiée.
 6. Quitter le mode maintenance.
+
+Sur un PostgreSQL local qui autorise `ALTER ROLE`, `db:bootstrap` peut toujours appliquer directement la valeur configurée.
 
 Cette rotation provoque une courte interruption des anciennes instances. Une rotation sans interruption nécessitera deux rôles alternés, par exemple `yahro_app_a` et `yahro_app_b`.
 
@@ -56,6 +60,6 @@ Le changement invalide les jetons de renouvellement, les jetons à usage unique 
 
 Ne pas remplacer directement cette valeur. Les secrets TOTP existants deviendraient indéchiffrables. Une migration versionnée doit d'abord déchiffrer chaque secret avec l'ancienne clé et le rechiffrer avec la nouvelle. Si l'ancienne clé est perdue, les utilisateurs concernés devront reconfigurer leur MFA après une procédure de récupération contrôlée.
 
-## Mot de passe `yahro_owner`
+## Identifiants du propriétaire de migration
 
-Ce secret est géré par Render Postgres. Utiliser la rotation d'identifiants de la plateforme, mettre à jour `DATABASE_MIGRATION_URL`, vérifier une migration sans changement, puis retirer l'ancien identifiant seulement après confirmation qu'il n'est plus utilisé.
+Ces identifiants sont gérés par le fournisseur PostgreSQL, Neon pour le déploiement gratuit. Utiliser sa fonction de réinitialisation, mettre à jour `DATABASE_MIGRATION_URL`, vérifier une migration sans changement, puis retirer l'ancien identifiant seulement après confirmation qu'il n'est plus utilisé. Le propriétaire peut porter un nom différent de `yahro_owner`: le moteur de migration utilise automatiquement le rôle fourni par cette URL.

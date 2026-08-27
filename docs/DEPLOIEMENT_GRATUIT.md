@@ -19,7 +19,7 @@ Le fichier à importer dans Render est `render.free.yaml`. Les fichiers `render.
 4. Copier l'URL complète avec `sslmode=require`.
 5. Conserver cette URL uniquement dans les secrets Render sous le nom `DATABASE_MIGRATION_URL`.
 
-La connexion directe est requise pour les migrations et leurs verrous PostgreSQL. Au démarrage, Yahro crée automatiquement le rôle limité `yahro_app`, applique les migrations sous verrou, puis supprime les identifiants privilégiés de la mémoire du serveur avant d'accepter des requêtes.
+La connexion directe est requise pour les migrations et leurs verrous PostgreSQL. Le rôle propriétaire contenu dans cette URL peut avoir le nom choisi par Neon. Au démarrage, Yahro crée automatiquement le rôle limité `yahro_app`, adapte les migrations à ce propriétaire, applique les migrations sous verrou, puis utilise uniquement `yahro_app` pour servir les requêtes.
 
 ## 2. Préparer Brevo
 

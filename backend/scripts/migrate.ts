@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 import "dotenv/config";
 import postgres from "postgres";
+import { renderMigrationForCurrentOwner } from "./migration-content.js";
 
 const migrationUrl = process.env.DATABASE_MIGRATION_URL;
 
@@ -23,6 +24,12 @@ try {
       applied_at timestamptz not null default now()
     )
   `;
+  const [migrationOwner] = await sql<{ identifier: string }[]>`
+    select format('%I', current_user) as identifier
+  `;
+  if (!migrationOwner?.identifier) {
+    throw new Error("Unable to identify the PostgreSQL migration owner");
+  }
 
   const files = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
 
@@ -41,7 +48,10 @@ try {
     }
 
     await sql.begin(async (transaction) => {
-      await transaction.unsafe(content);
+      // Keep the checksum tied to the immutable migration file, while adapting the
+      // legacy owner alias to the real owner chosen by the PostgreSQL provider.
+      const executableContent = renderMigrationForCurrentOwner(content, migrationOwner.identifier);
+      await transaction.unsafe(executableContent);
       await transaction`
         insert into public._yahro_migrations (name, checksum) values (${file}, ${checksum})
       `;

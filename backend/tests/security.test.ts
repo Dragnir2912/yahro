@@ -6,6 +6,7 @@ import { hasMinimumRole, requireRole } from "../src/security/authorization.js";
 import { createTokenService, parseRefreshToken, serializeRefreshToken } from "../src/security/tokens.js";
 import { createRecoveryCodes, decryptTotpSecret, encodeBase32, encryptTotpSecret, hotp, normalizeRecoveryCode, verifyTotp } from "../src/security/totp.js";
 import { moneySchema, parseBody, passwordSchema } from "../src/security/validation.js";
+import { renderMigrationForCurrentOwner } from "../scripts/migration-content.js";
 
 const baseEnvironment = {
   NODE_ENV: "test",
@@ -18,6 +19,14 @@ const baseEnvironment = {
 };
 
 describe("configuration security", () => {
+  it("adapts legacy migrations to the provider's quoted owner without changing their source", () => {
+    const source = "AUTHORIZATION yahro_owner; ALTER DEFAULT PRIVILEGES FOR ROLE yahro_owner;";
+    expect(renderMigrationForCurrentOwner(source, '"neondb owner"')).toBe(
+      'AUTHORIZATION "neondb owner"; ALTER DEFAULT PRIVILEGES FOR ROLE "neondb owner";',
+    );
+    expect(source).toContain("yahro_owner");
+  });
+
   it("rejects wildcard CORS origins", () => {
     expect(() => loadConfig({ ...baseEnvironment, APP_ORIGIN: "*" })).toThrow();
   });
