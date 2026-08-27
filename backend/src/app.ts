@@ -3,7 +3,9 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
+import fastifyStatic from "@fastify/static";
 import Fastify, { LogController } from "fastify";
+import path from "node:path";
 import type { AppConfig } from "./config.js";
 import { createDatabase } from "./db/client.js";
 import { AppError } from "./lib/errors.js";
@@ -78,8 +80,17 @@ export async function createApp(config: AppConfig) {
     global: true,
     contentSecurityPolicy: {
       directives: {
-        defaultSrc: ["'none'"],
+        defaultSrc: ["'self'"],
+        baseUri: ["'self'"],
+        objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+        scriptSrc: ["'self'"],
+        scriptSrcAttr: ["'none'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        fontSrc: ["'self'", "data:"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'"],
       },
     },
     crossOriginResourcePolicy: { policy: "same-site" },
@@ -129,10 +140,6 @@ export async function createApp(config: AppConfig) {
     }
   });
 
-  app.setNotFoundHandler(async (_request, reply) => {
-    return reply.code(404).send({ code: "NOT_FOUND", message: "Resource not found." });
-  });
-
   app.setErrorHandler(async (error, request, reply) => {
     const unknownError = error as { statusCode?: number; validation?: unknown; code?: string };
     const statusCode = error instanceof AppError ? error.statusCode : (unknownError.statusCode ?? 500);
@@ -169,6 +176,35 @@ export async function createApp(config: AppConfig) {
   await registerInsightRoutes(app, { database, authenticate });
   await registerProjectRoutes(app, { database, authenticate });
   await registerCurrencyRoutes(app, { database, authenticate });
+
+  if (config.serveFrontend) {
+    const frontendRoot = path.resolve(process.cwd(), config.frontendDistPath);
+    await app.register(fastifyStatic, {
+      root: frontendRoot,
+      maxAge: "1y",
+      immutable: true,
+      setHeaders(response, filePath) {
+        if (path.basename(filePath) === "index.html") {
+          response.header("Cache-Control", "no-store");
+        } else if (!filePath.includes(`${path.sep}assets${path.sep}`)) {
+          response.header("Cache-Control", "public, max-age=3600");
+        }
+      },
+    });
+  }
+
+  app.setNotFoundHandler(async (request, reply) => {
+    const acceptsHtml = request.headers.accept?.includes("text/html") ?? false;
+    const isFrontendNavigation = config.serveFrontend
+      && (request.method === "GET" || request.method === "HEAD")
+      && !request.url.startsWith("/api/")
+      && !request.url.startsWith("/health/")
+      && acceptsHtml;
+    if (isFrontendNavigation) {
+      return reply.type("text/html; charset=utf-8").sendFile("index.html", { maxAge: 0, immutable: false });
+    }
+    return reply.code(404).send({ code: "NOT_FOUND", message: "Resource not found." });
+  });
 
   app.addHook("onClose", async () => {
     await database.close();

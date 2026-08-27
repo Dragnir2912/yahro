@@ -81,6 +81,7 @@ npm audit --omit=dev
 
 Le paquet Render se trouve dans `render.yaml`. Une preproduction separee est definie dans `render.staging.yaml`.
 
+- Déploiement bêta à 0 euro: `render.free.yaml` et `docs/DEPLOIEMENT_GRATUIT.md`
 - Guide complet: `docs/DEPLOYMENT_RENDER.md`
 - Generation et rotation des secrets: `docs/SECRET_ROTATION.md`
 - Verification publique: `npm run verify:deployment`

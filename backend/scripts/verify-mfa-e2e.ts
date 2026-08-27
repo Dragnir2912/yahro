@@ -100,8 +100,24 @@ try {
 
   const firstLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email, password } });
   expectStatus(firstLogin.statusCode, 200, "first login");
-  const firstAuth = firstLogin.json<{ accessToken: string }>();
-  const authorization = { authorization: `Bearer ${firstAuth.accessToken}` };
+
+  const loginCookieHeader = firstLogin.headers["set-cookie"];
+  const loginCookie = (Array.isArray(loginCookieHeader) ? loginCookieHeader[0] : loginCookieHeader)?.split(";", 1)[0];
+  if (!loginCookie) throw new Error("refresh cookie missing after login");
+  const refresh = await app.inject({
+    method: "POST",
+    url: "/api/auth/refresh",
+    headers: { cookie: loginCookie, origin: config.allowedOrigins[0] },
+  });
+  expectStatus(refresh.statusCode, 200, "refresh session rotation");
+  const refreshedAuth = refresh.json<{ accessToken: string }>();
+  const refreshedProfile = await app.inject({
+    method: "GET",
+    url: "/api/auth/me",
+    headers: { authorization: `Bearer ${refreshedAuth.accessToken}` },
+  });
+  expectStatus(refreshedProfile.statusCode, 200, "refreshed session access");
+  const authorization = { authorization: `Bearer ${refreshedAuth.accessToken}` };
 
   const profile = await app.inject({ method: "GET", url: "/api/auth/me", headers: authorization });
   expectStatus(profile.statusCode, 200, "identity profile");
@@ -178,6 +194,7 @@ try {
   process.stdout.write("verification_email_resend=ok\n");
   process.stdout.write("existing_account_notice=ok\n");
   process.stdout.write("identity_profile=ok\n");
+  process.stdout.write("refresh_session_rotation=ok\n");
   process.stdout.write("password_confirmation_not_accepted_when_mismatched=ok\n");
   process.stdout.write("mfa_totp_activation=ok\n");
   process.stdout.write("mfa_password_gate=ok\n");

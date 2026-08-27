@@ -125,10 +125,10 @@ interface AuthLookup {
   passwordHash: string;
   nickname: string;
   status: "PENDING" | "ACTIVE" | "LOCKED" | "DELETED";
-  emailVerifiedAt: Date | null;
+  emailVerifiedAt: Date | string | null;
   sessionVersion: number;
   failedLoginCount: number;
-  lockedUntil: Date | null;
+  lockedUntil: Date | string | null;
   tenantId: string | null;
   role: MembershipRole | null;
 }
@@ -139,12 +139,12 @@ interface RefreshLookup {
   userId: string;
   tenantId: string;
   tokenHash: string;
-  expiresAt: Date;
-  revokedAt: Date | null;
+  expiresAt: Date | string;
+  revokedAt: Date | string | null;
   revokeReason: string | null;
   issuedSessionVersion: number;
   currentSessionVersion: number;
-  authenticatedAt: Date;
+  authenticatedAt: Date | string;
   status: "PENDING" | "ACTIVE" | "LOCKED" | "DELETED";
   role: MembershipRole;
 }
@@ -153,8 +153,8 @@ interface OneTimeLookup {
   id: string;
   userId: string;
   tenantId: string | null;
-  expiresAt: Date;
-  consumedAt: Date | null;
+  expiresAt: Date | string;
+  consumedAt: Date | string | null;
 }
 
 interface MfaChallengeLookup {
@@ -162,12 +162,24 @@ interface MfaChallengeLookup {
   userId: string;
   tenantId: string;
   attempts: number;
-  expiresAt: Date;
-  consumedAt: Date | null;
+  expiresAt: Date | string;
+  consumedAt: Date | string | null;
   totpSecretEncrypted: string;
   totpLastUsedStep: number | null;
   sessionVersion: number;
   role: MembershipRole;
+}
+
+function databaseTimestamp(value: Date | string, field: string) {
+  const timestamp = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new Error(`Invalid database timestamp for ${field}`);
+  }
+  return timestamp;
+}
+
+function nullableDatabaseTimestamp(value: Date | string | null, field: string) {
+  return value === null ? null : databaseTimestamp(value, field);
 }
 
 interface AuthRouteDependencies {
@@ -283,7 +295,13 @@ export async function registerAuthRoutes(app: FastifyInstance, dependencies: Aut
     const [record] = await database.client<AuthLookup[]>`
       select * from private.lookup_user_for_auth(${normalizeEmail(emailAddress)})
     `;
-    return record;
+    return record
+      ? {
+          ...record,
+          emailVerifiedAt: nullableDatabaseTimestamp(record.emailVerifiedAt, "auth.emailVerifiedAt"),
+          lockedUntil: nullableDatabaseTimestamp(record.lockedUntil, "auth.lockedUntil"),
+        }
+      : undefined;
   }
 
   async function recordLoginFailure(user: AuthLookup, request: FastifyRequest) {
@@ -374,7 +392,13 @@ export async function registerAuthRoutes(app: FastifyInstance, dependencies: Aut
     const [record] = await database.client<MfaChallengeLookup[]>`
       select * from private.lookup_mfa_challenge(${challengeHash})
     `;
-    return record;
+    return record
+      ? {
+          ...record,
+          expiresAt: databaseTimestamp(record.expiresAt, "mfaChallenge.expiresAt"),
+          consumedAt: nullableDatabaseTimestamp(record.consumedAt, "mfaChallenge.consumedAt"),
+        }
+      : undefined;
   }
 
   async function recordMfaFailure(record: MfaChallengeLookup, request: FastifyRequest) {
@@ -708,12 +732,16 @@ export async function registerAuthRoutes(app: FastifyInstance, dependencies: Aut
     `;
     if (!session) throw unauthorized();
 
+    const sessionExpiresAt = databaseTimestamp(session.expiresAt, "refreshSession.expiresAt");
+    const sessionRevokedAt = nullableDatabaseTimestamp(session.revokedAt, "refreshSession.revokedAt");
+    const sessionAuthenticatedAt = databaseTimestamp(session.authenticatedAt, "refreshSession.authenticatedAt");
+
     const suppliedHash = hashToken(parsed.secret, config.tokenHashPepper);
     if (!safeEqual(session.tokenHash, suppliedHash)) throw unauthorized();
 
-    if (session.revokedAt) {
+    if (sessionRevokedAt) {
       const rotatedWithinGrace = session.revokeReason === "ROTATED"
-        && Date.now() - session.revokedAt.getTime() <= config.refreshReuseGraceSeconds * 1000;
+        && Date.now() - sessionRevokedAt.getTime() <= config.refreshReuseGraceSeconds * 1000;
       if (rotatedWithinGrace) {
         throw new AppError(409, "REFRESH_RETRY", "A concurrent refresh completed. Retry with the current cookie.");
       }
@@ -737,7 +765,7 @@ export async function registerAuthRoutes(app: FastifyInstance, dependencies: Aut
     }
 
     if (
-      session.expiresAt <= new Date() ||
+      sessionExpiresAt <= new Date() ||
       session.status !== "ACTIVE" ||
       session.issuedSessionVersion !== session.currentSessionVersion
     ) {
@@ -766,7 +794,7 @@ export async function registerAuthRoutes(app: FastifyInstance, dependencies: Aut
         ipHash: hashToken(request.ip, config.tokenHashPepper),
         expiresAt: nextExpiry,
         sessionVersion: session.currentSessionVersion,
-        authenticatedAt: session.authenticatedAt,
+        authenticatedAt: sessionAuthenticatedAt,
       });
     });
 
@@ -776,7 +804,7 @@ export async function registerAuthRoutes(app: FastifyInstance, dependencies: Aut
       role: session.role,
       sessionId: nextSessionId,
       sessionVersion: session.currentSessionVersion,
-      authTime: Math.floor(session.authenticatedAt.getTime() / 1000),
+      authTime: Math.floor(sessionAuthenticatedAt.getTime() / 1000),
     });
     setRefreshCookie(reply, config, serializeRefreshToken(nextSessionId, nextSecret));
     return { accessToken, expiresIn: config.accessTokenTtlSeconds };
@@ -808,7 +836,12 @@ export async function registerAuthRoutes(app: FastifyInstance, dependencies: Aut
     const [record] = await database.client<OneTimeLookup[]>`
       select * from private.lookup_one_time_token(${tokenHash}, 'VERIFY_EMAIL')
     `;
-    if (!record || !record.tenantId || record.consumedAt || record.expiresAt <= new Date()) {
+    if (
+      !record ||
+      !record.tenantId ||
+      nullableDatabaseTimestamp(record.consumedAt, "oneTimeToken.consumedAt") ||
+      databaseTimestamp(record.expiresAt, "oneTimeToken.expiresAt") <= new Date()
+    ) {
       throw new AppError(400, "INVALID_OR_EXPIRED_TOKEN", "Invalid or expired token");
     }
     await database.withSecurityContext({ userId: record.userId, tenantId: record.tenantId }, async (transaction) => {
@@ -879,7 +912,12 @@ export async function registerAuthRoutes(app: FastifyInstance, dependencies: Aut
     const [record] = await database.client<OneTimeLookup[]>`
       select * from private.lookup_one_time_token(${tokenHash}, 'RESET_PASSWORD')
     `;
-    if (!record || !record.tenantId || record.consumedAt || record.expiresAt <= new Date()) {
+    if (
+      !record ||
+      !record.tenantId ||
+      nullableDatabaseTimestamp(record.consumedAt, "oneTimeToken.consumedAt") ||
+      databaseTimestamp(record.expiresAt, "oneTimeToken.expiresAt") <= new Date()
+    ) {
       throw new AppError(400, "INVALID_OR_EXPIRED_TOKEN", "Invalid or expired token");
     }
     const passwordHash = await hashPassword(input.password);

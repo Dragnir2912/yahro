@@ -52,6 +52,26 @@ describe("configuration security", () => {
     expect(() => loadConfig({ ...baseEnvironment, DEPLOYMENT_PLATFORM: "render" })).toThrow();
   });
 
+  it("uses Render's HTTPS address for a single-service deployment", () => {
+    const config = loadConfig({
+      ...baseEnvironment,
+      NODE_ENV: "production",
+      DEPLOYMENT_PLATFORM: "render",
+      HOST: "0.0.0.0",
+      APP_ORIGIN: undefined,
+      PUBLIC_API_ORIGIN: undefined,
+      RENDER_EXTERNAL_URL: "https://yahro-free.onrender.com",
+      SMTP_HOST: "smtp-relay.brevo.com",
+      SMTP_PORT: "2525",
+      SMTP_USER: "yahro",
+      SMTP_PASSWORD: "secret",
+      SERVE_FRONTEND: "true",
+    });
+    expect(config.allowedOrigins).toEqual(["https://yahro-free.onrender.com"]);
+    expect(config.publicApiOrigin).toBe("https://yahro-free.onrender.com");
+    expect(config.serveFrontend).toBe(true);
+  });
+
   it("requires HTTPS and SMTP in production", () => {
     expect(() => loadConfig({ ...baseEnvironment, NODE_ENV: "production" })).toThrow();
     expect(() =>

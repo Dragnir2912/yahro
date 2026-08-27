@@ -20,6 +20,7 @@ export function createEmailService(config: AppConfig): EmailService {
         host: config.smtp.host,
         port: config.smtp.port,
         secure: config.smtp.secure,
+        requireTLS: config.isProduction && !config.smtp.secure,
         ...(config.smtp.user && config.smtp.password
           ? { auth: { user: config.smtp.user, pass: config.smtp.password } }
           : {}),

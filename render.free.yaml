@@ -1,0 +1,54 @@
+services:
+  - type: web
+    runtime: node
+    name: yahro-free
+    region: frankfurt
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build && npm --prefix backend ci --include=dev && npm --prefix backend run build
+    startCommand: npm --prefix backend run start:with-migrations
+    healthCheckPath: /health/ready
+    maxShutdownDelaySeconds: 30
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: 24.16.0
+      - key: NODE_ENV
+        value: production
+      - key: DEPLOYMENT_PLATFORM
+        value: render
+      - key: HOST
+        value: 0.0.0.0
+      - key: SERVE_FRONTEND
+        value: "true"
+      - key: FRONTEND_DIST_PATH
+        value: ../dist
+      - key: DATABASE_MIGRATION_URL
+        sync: false
+      - key: YAHRO_APP_PASSWORD
+        generateValue: true
+      - key: JWT_SECRET
+        sync: false
+      - key: TOKEN_HASH_PEPPER
+        sync: false
+      - key: MFA_ENCRYPTION_KEY
+        sync: false
+      - key: SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: "2525"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+      - key: MAX_UPLOAD_BYTES
+        value: "1048576"
+      - key: MAX_CSV_ROWS
+        value: "2000"
+      - key: REFRESH_REUSE_GRACE_SECONDS
+        value: "5"

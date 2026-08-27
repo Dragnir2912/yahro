@@ -748,7 +748,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
 
           {activeNav === "projects" && <ProjectsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} />}
 
-          {activeNav === "accounts" && accessToken && <AccountsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} onChanged={() => setFinanceRevision((current) => current + 1)} />}
+          {activeNav === "accounts" && accessToken && <AccountsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} revision={financeRevision} onChanged={() => setFinanceRevision((current) => current + 1)} />}
 
           {activeNav === "transactions" && accessToken && <TransactionsDashboard accessToken={accessToken} language={language} onAdd={() => setAddOpen(true)} revision={financeRevision} />}
 

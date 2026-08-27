@@ -56,6 +56,8 @@ const environmentSchema = z
     SMTP_PASSWORD: optionalString,
     SMTP_FROM: z.string().trim().default("Yahro <no-reply@example.invalid>"),
     DEV_EMAIL_CAPTURE_DIR: z.string().trim().default(".dev-mail"),
+    SERVE_FRONTEND: booleanFromString,
+    FRONTEND_DIST_PATH: z.string().trim().default("../dist"),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
     MAX_UPLOAD_BYTES: z.coerce.number().int().min(1024).max(10 * 1024 * 1024).default(5 * 1024 * 1024),
     MAX_CSV_ROWS: z.coerce.number().int().min(1).max(100_000).default(10_000),
@@ -91,7 +93,12 @@ const environmentSchema = z
 export type AppConfig = ReturnType<typeof loadConfig>;
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
-  const parsed = environmentSchema.parse(environment);
+  const renderExternalUrl = environment.DEPLOYMENT_PLATFORM === "render" ? environment.RENDER_EXTERNAL_URL : undefined;
+  const parsed = environmentSchema.parse({
+    ...environment,
+    APP_ORIGIN: environment.APP_ORIGIN || renderExternalUrl,
+    PUBLIC_API_ORIGIN: environment.PUBLIC_API_ORIGIN || renderExternalUrl,
+  });
   const databaseUrl = parsed.DATABASE_URL ?? (() => {
     const derived = new URL(parsed.DATABASE_MIGRATION_URL!);
     derived.username = "yahro_app";
@@ -127,6 +134,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
         }
       : undefined,
     devEmailCaptureDirectory: parsed.DEV_EMAIL_CAPTURE_DIR,
+    serveFrontend: parsed.SERVE_FRONTEND,
+    frontendDistPath: parsed.FRONTEND_DIST_PATH,
     logLevel: parsed.LOG_LEVEL,
     maxUploadBytes: parsed.MAX_UPLOAD_BYTES,
     maxCsvRows: parsed.MAX_CSV_ROWS,

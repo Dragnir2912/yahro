@@ -1,4 +1,7 @@
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "http://127.0.0.1:4000";
+const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim().replace(/\/$/, "");
+// Development requests go through Vite's same-origin proxy. This keeps the
+// Strict refresh cookie valid whether the browser uses localhost or 127.0.0.1.
+const API_URL = import.meta.env.DEV ? "" : configuredApiUrl || "";
 
 export class ApiError extends Error {
   readonly status: number;
