@@ -6,6 +6,7 @@ import Ghost404Page from "@/components/ui/ghost-404-page-1";
 import { api, ApiError, onUnauthorized, type AuthResult } from "@/lib/api";
 import { setPageMetadata } from "@/lib/page-metadata";
 import type { ProfileUser } from "@/components/profile-settings";
+import YahroLoadingScreen from "@/components/yahro-loading-screen";
 
 const BudgetDashboard = lazy(() => import("@/components/ui/saa-s-template"));
 
@@ -139,7 +140,7 @@ export default function App() {
   }
 
   if (restoring) {
-    return <div className="grid min-h-screen place-items-center bg-[#f7f7f3] text-sm text-[var(--yahro-muted)] dark:bg-[#080a07] dark:text-[#a5a79f]">Yahro...</div>;
+    return <YahroLoadingScreen language={currentLanguage()} />;
   }
 
   if (!session) {
@@ -171,7 +172,7 @@ export default function App() {
   };
 
   return (
-    <Suspense fallback={<div className="grid min-h-screen place-items-center bg-[#f7f7f3] text-sm text-[var(--yahro-muted)] dark:bg-[#080a07] dark:text-[#a5a79f]">Yahro...</div>}>
+    <Suspense fallback={<YahroLoadingScreen language={session.language} />}>
       <BudgetDashboard
         initialLanguage={session.language}
         onLogout={logout}

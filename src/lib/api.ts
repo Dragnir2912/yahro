@@ -93,6 +93,7 @@ export interface FinanceTransaction {
   accountId: string;
   categoryId: string | null;
   personalDetailId: string | null;
+  transferGroupId: string | null;
   createdById: string;
   type: TransactionType;
   paymentMethod: PaymentMethod;
@@ -105,6 +106,12 @@ export interface FinanceTransaction {
   tags: string[];
   isVerified: boolean;
   version: number;
+}
+
+export interface AccountTransfer {
+  transferGroupId: string;
+  source: FinanceTransaction;
+  destination: FinanceTransaction;
 }
 
 export interface DashboardData {
@@ -326,6 +333,9 @@ export const api = {
   },
   createTransaction(accessToken: string, input: { accountId: string; categoryId?: string; personalDetailId?: string; type: "INCOME" | "EXPENSE"; paymentMethod: PaymentMethod; amount: string; transactionDate: string; merchant?: string; description: string; notes?: string; tags?: string[] }) {
     return request<{ data: FinanceTransaction }>("/api/transactions", { method: "POST", accessToken, body: input });
+  },
+  createTransfer(accessToken: string, input: { sourceAccountId: string; destinationAccountId: string; sourceAmount: string; destinationAmount?: string; transactionDate: string; description: string; notes?: string }) {
+    return request<{ data: AccountTransfer }>("/api/transfers", { method: "POST", accessToken, body: input });
   },
   updateTransaction(accessToken: string, id: string, input: Partial<{ categoryId: string; personalDetailId: string | null; paymentMethod: PaymentMethod; amount: string; transactionDate: string; merchant: string; description: string; notes: string; tags: string[] }> & { version: number }) {
     return request<{ data: FinanceTransaction }>(`/api/transactions/${encodeURIComponent(id)}`, { method: "PATCH", accessToken, body: input });

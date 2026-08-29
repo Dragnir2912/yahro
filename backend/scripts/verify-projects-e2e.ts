@@ -152,6 +152,59 @@ try {
   const profile = await app.inject({ method: "GET", url: "/api/auth/me", headers: owner.authorization });
   if (profile.json<{ user: { defaultCurrency: string } }>().user.defaultCurrency !== "USD") throw new Error("default currency was not updated");
 
+  const accountIds: string[] = [];
+  for (const account of [
+    { name: "Compte source E2E", openingBalance: "1000" },
+    { name: "Compte destination E2E", openingBalance: "100" },
+  ]) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/accounts",
+      headers: owner.authorization,
+      payload: {
+        name: account.name,
+        type: "CHECKING",
+        currency: "EUR",
+        openingBalance: account.openingBalance,
+        openingBalanceDate: spentAt.toISOString(),
+        color: "#769450",
+        icon: "landmark",
+        includeInNetWorth: true,
+      },
+    });
+    expectStatus(response.statusCode, 201, account.name);
+    accountIds.push(response.json<{ data: { id: string } }>().data.id);
+  }
+  const transferResponse = await app.inject({
+    method: "POST",
+    url: "/api/transfers",
+    headers: owner.authorization,
+    payload: {
+      sourceAccountId: accountIds[0],
+      destinationAccountId: accountIds[1],
+      sourceAmount: "250",
+      transactionDate: spentAt.toISOString(),
+      description: "Épargne E2E",
+    },
+  });
+  expectStatus(transferResponse.statusCode, 201, "account transfer");
+  const transfer = transferResponse.json<{ data: { transferGroupId: string; source: { id: string; amount: string }; destination: { amount: string } } }>().data;
+  if (!transfer.transferGroupId || Number(transfer.source.amount) !== -250 || Number(transfer.destination.amount) !== 250) throw new Error("transfer legs are incorrect");
+
+  const assertAccountBalances = async (source: number, destination: number, label: string) => {
+    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard", headers: owner.authorization });
+    expectStatus(dashboard.statusCode, 200, label);
+    const balances = new Map(dashboard.json<{ accountBalances: Array<{ id: string; balance: string }> }>().accountBalances.map((item) => [item.id, Number(item.balance)]));
+    if (balances.get(accountIds[0]!) !== source || balances.get(accountIds[1]!) !== destination) throw new Error(`${label}: incorrect account balances`);
+  };
+  await assertAccountBalances(750, 350, "balances after transfer");
+  const deleteTransfer = await app.inject({ method: "DELETE", url: `/api/transactions/${transfer.source.id}`, headers: owner.authorization });
+  expectStatus(deleteTransfer.statusCode, 204, "transfer deletion");
+  await assertAccountBalances(1000, 100, "balances after transfer deletion");
+  const restoreTransfer = await app.inject({ method: "POST", url: `/api/transactions/${transfer.source.id}/restore`, headers: owner.authorization });
+  expectStatus(restoreTransfer.statusCode, 200, "transfer restoration");
+  await assertAccountBalances(750, 350, "balances after transfer restoration");
+
   const outsider = await registerAndLogin("project-outsider");
   const forbiddenExpenses = await app.inject({ method: "GET", url: `/api/projects/${project.id}/expenses`, headers: outsider.authorization });
   expectStatus(forbiddenExpenses.statusCode, 404, "private project isolation");
@@ -168,6 +221,8 @@ try {
   process.stdout.write("custom_exchange_rate_priority=ok\n");
   process.stdout.write("official_exchange_rate_provider=ok\n");
   process.stdout.write("default_currency_override=ok\n");
+  process.stdout.write("account_transfer_balances=ok\n");
+  process.stdout.write("account_transfer_delete_restore=ok\n");
 } finally {
   await app.close();
 }

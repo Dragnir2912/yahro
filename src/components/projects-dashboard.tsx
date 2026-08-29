@@ -206,16 +206,16 @@ export default function ProjectsDashboard({ accessToken, language, defaultCurren
 
   const visibleProjects = projects.filter((project) => filter === "ALL" || project.status === filter);
   const totals = useMemo(
-    () => projects.reduce(
+    () => projects.filter((project) => project.currency === defaultCurrency).reduce(
       (result, project) => ({
         budget: result.budget + Number(project.totalBudget),
         spent: result.spent + Number(project.lifetimeSpentAmount),
       }),
       { budget: 0, spent: 0 },
     ),
-    [projects],
+    [defaultCurrency, projects],
   );
-  const summaryCurrency = projects[0]?.currency ?? "XOF";
+  const summaryCurrency = defaultCurrency;
 
   const createProject = async (input: ProjectInput) => {
     if (accessToken) {

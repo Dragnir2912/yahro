@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleDollarSign,
+  CircleHelp,
   CreditCard,
   Crown,
   Download,
@@ -31,6 +32,7 @@ import {
   UserRound,
   WalletCards,
   X,
+  ArrowRightLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { currencyFractionDigits, currencyName, formatCurrencyAmount, normalizeCurrencyAmount } from "@/lib/currencies";
@@ -52,12 +54,15 @@ import { applyTheme, initialTheme, subscribeToSystemTheme } from "@/lib/theme";
 import { DashboardStatCard as StatCard, DashboardStatSkeleton as StatSkeleton } from "@/components/dashboard-stat-card";
 import Button from "@/components/ui/button";
 import { paymentMethodLabel } from "@/lib/payment-methods";
+import DashboardGuide from "@/components/dashboard-guide";
+import { dashboardGuideSteps } from "@/lib/dashboard-guide";
+import TransferModal from "@/components/transfer-modal";
 
 const CashFlowChart = React.lazy(() => import("@/components/ui/cash-flow-chart"));
 
 type Language = "fr" | "en";
 type Theme = "light" | "dark";
-type TransactionKind = "expense" | "income";
+type TransactionKind = "expense" | "income" | "transfer-in" | "transfer-out";
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "BANK_CARD" | "MOBILE_MONEY" | "DIGITAL_WALLET" | "DIRECT_DEBIT" | "CHECK" | "OTHER";
 
 const copy: Record<Language, Record<string, string>> = {
@@ -182,6 +187,7 @@ interface Transaction {
   date: string;
   icon: React.ReactNode;
   iconStyle: string;
+  currency?: string;
 }
 
 const initialTransactions: Transaction[] = demoTransactions.map((item) => ({
@@ -481,6 +487,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>(accessToken ? [] : initialTransactions);
   const [dashboardData, setDashboardData] = useState<DashboardData>();
   const [cashFlowHistory, setCashFlowHistory] = useState<DashboardData["cashflow"]>();
@@ -493,6 +500,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [cashFlowPeriod, setCashFlowPeriod] = useState<3 | 6>(6);
   const [periodMenuOpen, setPeriodMenuOpen] = useState(false);
+  const [guideStep, setGuideStep] = useState<number | null>(() => !accessToken && window.localStorage.getItem("yahro-demo-guide-completed-v1") !== "true" ? 0 : null);
   const nickname = currentProfile.nickname;
 
   const t = (key: string) => copy[language][key] ?? key;
@@ -525,12 +533,15 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
           merchant: item.merchant || item.description,
           category: path || (language === "fr" ? "Sans catégorie" : "Uncategorized"),
           categoryEn: path || "Uncategorized",
-          amount: Number(item.amount),
-          kind: item.type === "INCOME" ? "income" : "expense",
+          amount: Math.abs(Number(item.amount)),
+          kind: item.type === "TRANSFER" ? (Number(item.amount) < 0 ? "transfer-out" : "transfer-in") : item.type === "INCOME" ? "income" : "expense",
           paymentMethod: item.paymentMethod,
+          currency: item.currency,
           date: item.transactionDate,
-          icon: <CategoryIcon name={category?.icon ?? family?.icon} size={18} />,
-          iconStyle: item.type === "INCOME"
+          icon: item.type === "TRANSFER" ? <ArrowRightLeft size={18} /> : <CategoryIcon name={category?.icon ?? family?.icon} size={18} />,
+          iconStyle: item.type === "TRANSFER"
+            ? "bg-[#e4ebf3] text-[#456582] dark:bg-[#202e3b] dark:text-[#9ec1df]"
+            : item.type === "INCOME"
             ? "bg-[#e4efdb] text-[#547238] dark:bg-[#26351e] dark:text-[#a9cd83]"
             : "bg-[#ecebea] text-[#6f7069] dark:bg-white/8 dark:text-[#bcbdb7]",
         };
@@ -617,6 +628,13 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
     setMobileMenuOpen(false);
   };
 
+  const showGuideStep = (step: number) => {
+    setGuideStep(step);
+    setActiveNav(dashboardGuideSteps[step].nav);
+    setMobileMenuOpen(false);
+    setNotificationsOpen(false);
+  };
+
   return (
     <div data-session={accessToken ? "authenticated" : "demo"} className="min-h-screen bg-[#f5f5f1] text-yahro-text transition-colors dark:bg-[#171813] dark:text-[#efefe9]">
       <a href="#yahro-main-content" className="yahro-skip-link">{language === "fr" ? "Aller au contenu" : "Skip to content"}</a>
@@ -682,10 +700,10 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
                 {alertBudget && <span className="absolute right-2 top-2 size-2 rounded-full border-2 border-[#f5f5f1] bg-[#d26e51] dark:border-[#171813]" />}
               </Button>
               {notificationsOpen && (
-                <div className="animate-soft-pop absolute right-0 top-12 w-[min(320px,calc(100vw-2rem))] rounded-2xl border border-[#dfdfd9] bg-white p-4 shadow-xl dark:border-white/10 dark:bg-[#20211d]">
+                <div role="dialog" aria-label={t("notifications")} className="animate-soft-pop fixed inset-x-3 top-[calc(4.75rem+env(safe-area-inset-top))] z-[80] max-h-[min(70dvh,32rem)] overflow-y-auto overscroll-contain rounded-2xl border border-[#dfdfd9] bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-[#20211d] sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:max-h-[min(70vh,32rem)] sm:w-80 sm:shadow-xl">
                   <div className="mb-3 flex items-center justify-between">
                     <p className="text-sm font-bold">{t("notifications")}</p>
-                    <span className="rounded-full bg-[#e7f0da] px-2 py-0.5 text-[10px] font-bold text-[#587337] dark:bg-[#2c3b22] dark:text-[#b8d793]">{alertBudget ? 1 : 0}</span>
+                    <div className="flex items-center gap-2"><span className="rounded-full bg-[#e7f0da] px-2 py-0.5 text-[10px] font-bold text-[#587337] dark:bg-[#2c3b22] dark:text-[#b8d793]">{alertBudget ? 1 : 0}</span><button type="button" onClick={() => setNotificationsOpen(false)} className="grid size-10 place-items-center rounded-xl hover:bg-black/5 dark:hover:bg-white/7 sm:hidden" aria-label={language === "fr" ? "Fermer les notifications" : "Close notifications"}><X size={17} /></button></div>
                   </div>
                   {alertBudget ? <div className="flex gap-3 rounded-xl bg-[#f6f7f1] p-3 dark:bg-white/5">
                     <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#f1e6d7] text-[#a36c25] dark:bg-[#3c3020] dark:text-[#e2b270]"><Target size={16} /></span>
@@ -697,6 +715,8 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
                 </div>
               )}
             </div>
+
+            <Button variant="ghost" size="icon" onClick={() => showGuideStep(0)} aria-label={language === "fr" ? "Ouvrir le guide" : "Open guide"} title={language === "fr" ? "Guide" : "Guide"}><CircleHelp size={18} /></Button>
 
             <ThemeToggle theme={theme} onChange={toggleTheme} label={t("theme")} />
 
@@ -748,7 +768,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
 
           {activeNav === "projects" && <ProjectsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} />}
 
-          {activeNav === "accounts" && accessToken && <AccountsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} revision={financeRevision} onChanged={() => setFinanceRevision((current) => current + 1)} />}
+          {activeNav === "accounts" && accessToken && <AccountsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} revision={financeRevision} onChanged={() => setFinanceRevision((current) => current + 1)} onTransfer={() => setTransferOpen(true)} />}
 
           {activeNav === "transactions" && accessToken && <TransactionsDashboard accessToken={accessToken} language={language} onAdd={() => setAddOpen(true)} revision={financeRevision} />}
 
@@ -850,11 +870,11 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
                     <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", transaction.iconStyle)}>{transaction.icon}</span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-[#33342e] dark:text-[#e8e8e3]">{transaction.merchant}</p>
-                      <p className="mt-0.5 text-[11px] text-[var(--yahro-muted)]">{language === "fr" ? transaction.category : transaction.categoryEn} - {formatTransactionDate(transaction.date, language, t)} - {paymentMethodLabel(transaction.paymentMethod, language)}</p>
+                      <p className="mt-0.5 line-clamp-2 text-[11px] text-[var(--yahro-muted)]">{transaction.kind.startsWith("transfer") ? (language === "fr" ? "Transfert entre comptes" : "Transfer between accounts") : (language === "fr" ? transaction.category : transaction.categoryEn)} - {formatTransactionDate(transaction.date, language, t)} - {paymentMethodLabel(transaction.paymentMethod, language)}</p>
                     </div>
                     <div className="text-right">
-                      <p className={cn("yahro-money text-sm font-bold", transaction.kind === "income" ? "text-[#638340] dark:text-[#a7ca7e]" : "text-[#33342e] dark:text-[#e4e4df]")}>{transaction.kind === "income" ? "+" : "-"}{formatCurrencyAmount(transaction.amount, appCurrency, language)}</p>
-                      <p className="mt-0.5 text-[10px] text-[var(--yahro-muted)]">{transaction.kind === "income" ? t("incomeSingle") : t("expense")}</p>
+                      <p className={cn("yahro-money text-sm font-bold", transaction.kind === "income" || transaction.kind === "transfer-in" ? "text-[#638340] dark:text-[#a7ca7e]" : "text-[#33342e] dark:text-[#e4e4df]")}>{transaction.kind === "income" || transaction.kind === "transfer-in" ? "+" : "-"}{formatCurrencyAmount(transaction.amount, transaction.currency ?? appCurrency, language)}</p>
+                      <p className="mt-0.5 text-[10px] text-[var(--yahro-muted)]">{transaction.kind === "income" ? t("incomeSingle") : transaction.kind === "expense" ? t("expense") : transaction.kind === "transfer-in" ? (language === "fr" ? "Transfert reçu" : "Transfer received") : (language === "fr" ? "Transfert envoyé" : "Transfer sent")}</p>
                     </div>
                   </div>
                 ))}
@@ -865,7 +885,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
               <h2 className="font-[Manrope_Variable] font-bold tracking-[-.02em]">{t("quickActions")}</h2>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 {[
-                  { key: "transfer", icon: ArrowRight, status: quickActionAvailability.transfer },
+                  { key: "transfer", icon: ArrowRightLeft, status: accessToken ? "available" : "account-required" },
                   { key: "import", icon: Download, status: quickActionAvailability.import },
                   { key: "export", icon: FileDown, status: quickActionAvailability.export },
                   { key: "addAccount", icon: CreditCard, status: accessToken ? "available" : quickActionAvailability.addAccount },
@@ -874,7 +894,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
                     key={key}
                     type="button"
                     disabled={status !== "available"}
-                    onClick={() => { if (key === "addAccount") setActiveNav("accounts"); }}
+                    onClick={() => { if (key === "addAccount") setActiveNav("accounts"); if (key === "transfer") setTransferOpen(true); }}
                     className="group flex min-h-28 flex-col items-start justify-between rounded-2xl border border-[#e5e5df] bg-[#fafaf7] p-4 text-left transition-all enabled:hover:-translate-y-0.5 enabled:hover:border-[#cfdcbc] enabled:hover:bg-[#f4f7ee] disabled:cursor-not-allowed disabled:opacity-65 dark:border-white/7 dark:bg-[#1a1b17] dark:enabled:hover:border-[#40532f] dark:enabled:hover:bg-[#222b1d]"
                   >
                     <span className="grid size-9 place-items-center rounded-xl bg-white text-[#6f8d4c] shadow-sm dark:bg-white/7 dark:text-[#afd087]"><Icon size={17} /></span>
@@ -917,6 +937,8 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
       </nav>
 
       {addOpen && <AddTransactionModal language={language} t={t} accessToken={accessToken} currency={appCurrency} onClose={() => setAddOpen(false)} onAdd={addTransaction} onNeedAccount={() => { setAddOpen(false); setActiveNav("accounts"); }} />}
+      {transferOpen && accessToken && <TransferModal accessToken={accessToken} language={language} onClose={() => setTransferOpen(false)} onCreated={() => { setTransferOpen(false); setFinanceRevision((current) => current + 1); }} onNeedAccounts={() => { setTransferOpen(false); setActiveNav("accounts"); }} />}
+      {guideStep !== null && <DashboardGuide language={language} step={guideStep} onStepChange={showGuideStep} onClose={() => { window.localStorage.setItem("yahro-demo-guide-completed-v1", "true"); setGuideStep(null); setActiveNav("overview"); }} />}
       {profileEditorOpen && <ProfileEditor accessToken={accessToken} language={language} profile={currentProfile} onClose={() => setProfileEditorOpen(false)} onUpdated={(updated) => { setCurrentProfile(updated); setLanguage(updated.locale === "en" ? "en" : "fr"); if (updated.defaultCurrency) setAppCurrency(updated.defaultCurrency); onProfileUpdated?.(updated); }} />}
     </div>
   );

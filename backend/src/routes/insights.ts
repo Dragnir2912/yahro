@@ -102,6 +102,7 @@ export async function registerInsightRoutes(app: FastifyInstance, dependencies: 
             ${accounts.openingBalance}
             + coalesce(sum(case when ${transactions.type} = 'INCOME' then ${transactions.amount} else 0 end), 0)
             - coalesce(sum(case when ${transactions.type} = 'EXPENSE' then ${transactions.amount} else 0 end), 0)
+            + coalesce(sum(case when ${transactions.type} = 'TRANSFER' then ${transactions.amount} else 0 end), 0)
           )::text`,
         })
         .from(accounts)

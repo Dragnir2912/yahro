@@ -1,6 +1,7 @@
 import { and, desc, eq, gt, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 import type { Database } from "../db/client.js";
 import { accounts, auditLogs, budgets, categories, personalCategoryDetails, transactions } from "../db/schema.js";
 import { conflict, notFound } from "../lib/errors.js";
@@ -85,6 +86,19 @@ const transactionUpdateSchema = transactionCreateSchema
   .partial()
   .extend({ personalDetailId: uuidSchema.nullable().optional(), version: z.number().int().positive() })
   .strict();
+
+const transferCreateSchema = z
+  .object({
+    sourceAccountId: uuidSchema,
+    destinationAccountId: uuidSchema,
+    sourceAmount: moneySchema.refine((value) => Number(value) > 0),
+    destinationAmount: moneySchema.refine((value) => Number(value) > 0).optional(),
+    transactionDate: z.coerce.date(),
+    description: z.string().trim().min(1).max(240),
+    notes: z.string().trim().max(4000).optional(),
+  })
+  .strict()
+  .refine((value) => value.sourceAccountId !== value.destinationAccountId, { message: "Transfer accounts must be different" });
 
 const transactionQuerySchema = z
   .object({
@@ -489,6 +503,72 @@ export async function registerFinanceRoutes(app: FastifyInstance, dependencies: 
     });
   });
 
+  app.post("/api/transfers", async (request, reply) => {
+    const auth = await authenticate(request);
+    requireRole(auth.role, "MEMBER");
+    const input = parseBody(transferCreateSchema, request.body);
+    return database.withSecurityContext(auth, async (transaction) => {
+      const transferAccounts = await transaction
+        .select({ id: accounts.id, currency: accounts.currency })
+        .from(accounts)
+        .where(and(
+          eq(accounts.tenantId, auth.tenantId),
+          isNull(accounts.archivedAt),
+          or(eq(accounts.id, input.sourceAccountId), eq(accounts.id, input.destinationAccountId)),
+        ));
+      const sourceAccount = transferAccounts.find((account) => account.id === input.sourceAccountId);
+      const destinationAccount = transferAccounts.find((account) => account.id === input.destinationAccountId);
+      if (!sourceAccount || !destinationAccount) throw notFound();
+
+      const sameCurrency = sourceAccount.currency === destinationAccount.currency;
+      if (!sameCurrency && !input.destinationAmount) throw conflict("DESTINATION_AMOUNT_REQUIRED_FOR_CURRENCY_TRANSFER");
+      if (sameCurrency && input.destinationAmount && Number(input.destinationAmount) !== Number(input.sourceAmount)) {
+        throw conflict("SAME_CURRENCY_TRANSFER_AMOUNT_MISMATCH");
+      }
+
+      const transferGroupId = randomUUID();
+      const destinationAmount = sameCurrency ? input.sourceAmount : input.destinationAmount!;
+      const created = await transaction
+        .insert(transactions)
+        .values([
+          {
+            tenantId: auth.tenantId,
+            accountId: sourceAccount.id,
+            createdById: auth.userId,
+            type: "TRANSFER" as const,
+            paymentMethod: "BANK_TRANSFER" as const,
+            amount: `-${input.sourceAmount}`,
+            currency: sourceAccount.currency,
+            transactionDate: input.transactionDate,
+            description: input.description,
+            notes: input.notes,
+            tags: [],
+            transferGroupId,
+          },
+          {
+            tenantId: auth.tenantId,
+            accountId: destinationAccount.id,
+            createdById: auth.userId,
+            type: "TRANSFER" as const,
+            paymentMethod: "BANK_TRANSFER" as const,
+            amount: destinationAmount,
+            currency: destinationAccount.currency,
+            transactionDate: input.transactionDate,
+            description: input.description,
+            notes: input.notes,
+            tags: [],
+            transferGroupId,
+          },
+        ])
+        .returning();
+      const source = created.find((item) => item.accountId === sourceAccount.id);
+      const destination = created.find((item) => item.accountId === destinationAccount.id);
+      if (!source || !destination) throw new Error("Transfer creation failed");
+      await transaction.insert(auditLogs).values(auditValues(request, auth, "TRANSFER_CREATED", "transfer", transferGroupId));
+      return reply.code(201).send({ data: { transferGroupId, source, destination } });
+    });
+  });
+
   app.post("/api/transactions", async (request, reply) => {
     const auth = await authenticate(request);
     requireRole(auth.role, "MEMBER");
@@ -546,14 +626,15 @@ export async function registerFinanceRoutes(app: FastifyInstance, dependencies: 
     return database.withSecurityContext(auth, async (transaction) => {
       const { version, ...rawChanges } = input;
       const changes = { ...rawChanges };
+      const [existingTransaction] = await transaction
+        .select({ type: transactions.type, categoryId: transactions.categoryId })
+        .from(transactions)
+        .where(and(eq(transactions.id, id), eq(transactions.tenantId, auth.tenantId), isNull(transactions.deletedAt)))
+        .limit(1);
+      if (!existingTransaction) throw notFound();
+      if (existingTransaction.type === "TRANSFER") throw conflict("TRANSFER_UPDATE_NOT_SUPPORTED");
       if (changes.categoryId || changes.personalDetailId) {
-        const [existing] = await transaction
-          .select({ type: transactions.type, categoryId: transactions.categoryId })
-          .from(transactions)
-          .where(and(eq(transactions.id, id), eq(transactions.tenantId, auth.tenantId), isNull(transactions.deletedAt)))
-          .limit(1);
-        if (!existing) throw notFound();
-        const finalCategoryId = changes.categoryId ?? existing.categoryId;
+        const finalCategoryId = changes.categoryId ?? existingTransaction.categoryId;
         if (changes.categoryId) {
           const [category] = await transaction
             .select({ type: categories.type })
@@ -565,7 +646,7 @@ export async function registerFinanceRoutes(app: FastifyInstance, dependencies: 
               or(isNull(categories.ownerUserId), eq(categories.ownerUserId, auth.userId)),
             ))
             .limit(1);
-          if (!category || category.type !== existing.type) throw conflict("CATEGORY_TYPE_MISMATCH");
+          if (!category || category.type !== existingTransaction.type) throw conflict("CATEGORY_TYPE_MISMATCH");
         }
         if (changes.personalDetailId) {
           if (!finalCategoryId) throw conflict("PERSONAL_DETAIL_REQUIRES_POST");
@@ -600,12 +681,19 @@ export async function registerFinanceRoutes(app: FastifyInstance, dependencies: 
     requireRole(auth.role, "MEMBER");
     const id = resourceId(request);
     await database.withSecurityContext(auth, async (transaction) => {
-      const [removed] = await transaction
+      const [target] = await transaction
+        .select({ transferGroupId: transactions.transferGroupId })
+        .from(transactions)
+        .where(and(eq(transactions.id, id), eq(transactions.tenantId, auth.tenantId), isNull(transactions.deletedAt)))
+        .limit(1);
+      if (!target) throw notFound();
+      const targetCondition = target.transferGroupId ? eq(transactions.transferGroupId, target.transferGroupId) : eq(transactions.id, id);
+      const removed = await transaction
         .update(transactions)
         .set({ deletedAt: new Date(), version: sql`${transactions.version} + 1` })
-        .where(and(eq(transactions.id, id), eq(transactions.tenantId, auth.tenantId), isNull(transactions.deletedAt)))
+        .where(and(targetCondition, eq(transactions.tenantId, auth.tenantId), isNull(transactions.deletedAt)))
         .returning({ id: transactions.id });
-      if (!removed) throw notFound();
+      if (removed.length === 0) throw notFound();
       await transaction.insert(auditLogs).values(auditValues(request, auth, "TRANSACTION_DELETED", "transaction", id));
     });
     return reply.code(204).send();
@@ -616,11 +704,19 @@ export async function registerFinanceRoutes(app: FastifyInstance, dependencies: 
     requireRole(auth.role, "MEMBER");
     const id = resourceId(request);
     return database.withSecurityContext(auth, async (transaction) => {
-      const [restored] = await transaction
+      const [target] = await transaction
+        .select({ transferGroupId: transactions.transferGroupId })
+        .from(transactions)
+        .where(and(eq(transactions.id, id), eq(transactions.tenantId, auth.tenantId), isNotNull(transactions.deletedAt)))
+        .limit(1);
+      if (!target) throw notFound();
+      const targetCondition = target.transferGroupId ? eq(transactions.transferGroupId, target.transferGroupId) : eq(transactions.id, id);
+      const restoredRows = await transaction
         .update(transactions)
         .set({ deletedAt: null, version: sql`${transactions.version} + 1` })
-        .where(and(eq(transactions.id, id), eq(transactions.tenantId, auth.tenantId), isNotNull(transactions.deletedAt)))
+        .where(and(targetCondition, eq(transactions.tenantId, auth.tenantId), isNotNull(transactions.deletedAt)))
         .returning();
+      const restored = restoredRows.find((item) => item.id === id) ?? restoredRows[0];
       if (!restored) throw notFound();
       await transaction.insert(auditLogs).values(auditValues(request, auth, "TRANSACTION_RESTORED", "transaction", id));
       return { data: restored };
