@@ -57,6 +57,7 @@ import { paymentMethodLabel } from "@/lib/payment-methods";
 import DashboardGuide from "@/components/dashboard-guide";
 import { dashboardGuideSteps } from "@/lib/dashboard-guide";
 import TransferModal from "@/components/transfer-modal";
+import TransferHistory from "@/components/transfer-history";
 
 const CashFlowChart = React.lazy(() => import("@/components/ui/cash-flow-chart"));
 
@@ -440,7 +441,7 @@ function AddTransactionModal({
                 type="button"
                 onClick={() => setKind(item)}
                 className={cn(
-                  "h-9 rounded-lg text-sm font-semibold transition-all",
+                  "yahro-touch-target h-11 rounded-lg text-sm font-semibold transition-all",
                   kind === item
                     ? "bg-white text-yahro-text shadow-sm dark:bg-[#2b2c27] dark:text-white"
                     : "text-[var(--yahro-muted)]",
@@ -500,7 +501,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [cashFlowPeriod, setCashFlowPeriod] = useState<3 | 6>(6);
   const [periodMenuOpen, setPeriodMenuOpen] = useState(false);
-  const [guideStep, setGuideStep] = useState<number | null>(() => !accessToken && window.localStorage.getItem("yahro-demo-guide-completed-v1") !== "true" ? 0 : null);
+  const [guideStep, setGuideStep] = useState<number | null>(() => !accessToken ? 0 : null);
   const nickname = currentProfile.nickname;
 
   const t = (key: string) => copy[language][key] ?? key;
@@ -740,7 +741,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
         </header>
 
         <main id="yahro-main-content" tabIndex={-1} className="mx-auto max-w-[1500px] px-4 pb-28 pt-7 sm:px-7 lg:px-9 lg:pb-10 lg:pt-9">
-          <section className={cn("mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end", activeNav !== "overview" && "hidden")}>
+          <section data-guide="overview" className={cn("mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end", activeNav !== "overview" && "hidden")}>
             <div className="animate-fade-up">
               <p className="mb-1 text-xs font-semibold uppercase tracking-[.13em] text-[var(--yahro-accent-text)] dark:text-[#9cbc73]">{t("overview")}</p>
               <h1 className="font-[Manrope_Variable] text-2xl font-extrabold tracking-[-.04em] text-yahro-text dark:text-[#f4f4ef] sm:text-3xl">{t("greeting")}{nickname ? `, ${nickname}` : ""}</h1>
@@ -752,27 +753,27 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
           </section>
 
           {activeNav !== "overview" && activeAvailability !== "available" && (
-            <FeatureState language={language} label={t(activeNav)} status={activeAvailability} onExitDemo={!accessToken ? onLogout : undefined} />
+            <div data-guide={activeNav}><FeatureState language={language} label={t(activeNav)} status={activeAvailability} onExitDemo={!accessToken ? onLogout : undefined} /></div>
           )}
 
           {activeNav === "settings" && accessToken && (
-            <div className="animate-fade-up mb-7">
+            <div data-guide="settings" className="animate-fade-up mb-7">
               <CurrencyTools accessToken={accessToken} language={language} defaultCurrency={appCurrency} onDefaultCurrencyChange={setAppCurrency} />
               <MfaSettings accessToken={accessToken} language={language} onSessionEnded={() => { void onLogout?.(); }} />
             </div>
           )}
 
-          {activeNav === "categories" && <CategoryManager accessToken={accessToken} language={language} />}
+          {activeNav === "categories" && <div className="relative"><div data-guide="categories" className="pointer-events-none absolute inset-x-0 top-0 h-44" aria-hidden /><CategoryManager accessToken={accessToken} language={language} /></div>}
 
-          {activeNav === "budgets" && <BudgetsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} />}
+          {activeNav === "budgets" && <div className="relative"><div data-guide="budgets" className="pointer-events-none absolute inset-x-0 top-0 h-44" aria-hidden /><BudgetsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} /></div>}
 
-          {activeNav === "projects" && <ProjectsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} />}
+          {activeNav === "projects" && <div className="relative"><div data-guide="projects" className="pointer-events-none absolute inset-x-0 top-0 h-44" aria-hidden /><ProjectsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} /></div>}
 
-          {activeNav === "accounts" && accessToken && <AccountsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} revision={financeRevision} onChanged={() => setFinanceRevision((current) => current + 1)} onTransfer={() => setTransferOpen(true)} />}
+          {activeNav === "accounts" && accessToken && <div className="relative"><div data-guide="accounts" className="pointer-events-none absolute inset-x-0 top-0 h-44" aria-hidden /><AccountsDashboard accessToken={accessToken} language={language} defaultCurrency={appCurrency} revision={financeRevision} onChanged={() => setFinanceRevision((current) => current + 1)} onTransfer={() => setTransferOpen(true)} /><TransferHistory accessToken={accessToken} language={language} revision={financeRevision} /></div>}
 
-          {activeNav === "transactions" && accessToken && <TransactionsDashboard accessToken={accessToken} language={language} onAdd={() => setAddOpen(true)} revision={financeRevision} />}
+          {activeNav === "transactions" && accessToken && <div className="relative"><div data-guide="transactions" className="pointer-events-none absolute inset-x-0 top-0 h-44" aria-hidden /><TransactionsDashboard accessToken={accessToken} language={language} onAdd={() => setAddOpen(true)} revision={financeRevision} /></div>}
 
-          {activeNav === "analytics" && accessToken && <AnalyticsDashboard dashboard={dashboardData} categories={financeCategories} language={language} currency={appCurrency} loading={financeLoading} />}
+          {activeNav === "analytics" && accessToken && <div className="relative"><div data-guide="analytics" className="pointer-events-none absolute inset-x-0 top-0 h-44" aria-hidden /><AnalyticsDashboard dashboard={dashboardData} categories={financeCategories} language={language} currency={appCurrency} loading={financeLoading} /></div>}
 
           {financeError && activeNav === "overview" && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e8cdc6] bg-[#fbeeea] px-4 py-3 dark:border-[#5a3a33] dark:bg-[#2e1f1b]"><p className="text-sm text-[#8f4634] dark:text-[#e9a695]">{financeError}</p><button type="button" onClick={() => void reloadFinance()} className="min-h-11 rounded-lg border border-[#d9b3aa] px-3 text-sm font-bold text-[#8f4634] hover:bg-[#f5ded8] dark:border-[#6d453c] dark:text-[#e9a695]">{language === "fr" ? "Réessayer" : "Retry"}</button></div>}
 
@@ -938,7 +939,7 @@ export default function BudgetDashboard({ initialLanguage = "fr", onLogout, prof
 
       {addOpen && <AddTransactionModal language={language} t={t} accessToken={accessToken} currency={appCurrency} onClose={() => setAddOpen(false)} onAdd={addTransaction} onNeedAccount={() => { setAddOpen(false); setActiveNav("accounts"); }} />}
       {transferOpen && accessToken && <TransferModal accessToken={accessToken} language={language} onClose={() => setTransferOpen(false)} onCreated={() => { setTransferOpen(false); setFinanceRevision((current) => current + 1); }} onNeedAccounts={() => { setTransferOpen(false); setActiveNav("accounts"); }} />}
-      {guideStep !== null && <DashboardGuide language={language} step={guideStep} onStepChange={showGuideStep} onClose={() => { window.localStorage.setItem("yahro-demo-guide-completed-v1", "true"); setGuideStep(null); setActiveNav("overview"); }} />}
+      {guideStep !== null && <DashboardGuide language={language} step={guideStep} onStepChange={showGuideStep} onClose={() => { setGuideStep(null); setActiveNav("overview"); }} />}
       {profileEditorOpen && <ProfileEditor accessToken={accessToken} language={language} profile={currentProfile} onClose={() => setProfileEditorOpen(false)} onUpdated={(updated) => { setCurrentProfile(updated); setLanguage(updated.locale === "en" ? "en" : "fr"); if (updated.defaultCurrency) setAppCurrency(updated.defaultCurrency); onProfileUpdated?.(updated); }} />}
     </div>
   );

@@ -505,7 +505,7 @@ function AuthDialog({ mode, language, onModeChange, onClose, onDemo, onAuthentic
             <button type="button" disabled={pending || resendCooldown > 0} onClick={resendVerification} className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#20211d] text-sm font-bold text-white transition-transform active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-55 dark:bg-[#dcebc5] dark:text-[#202b13]">{pending ? <LoaderCircle size={16} className="animate-spin" /> : <RefreshCw size={15} />}{resendCooldown > 0 ? `${t("resendIn")} ${resendCooldown} s` : t("resendEmail")}</button>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               <button type="button" onClick={() => { setVerificationEmail(null); setMessage(null); setResendCooldown(0); }} className="h-10 rounded-xl border border-black/10 bg-white text-xs font-bold hover:bg-[#f5f5f1] dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/8">{t("useAnotherEmail")}</button>
-              <button type="button" onClick={() => { setVerificationEmail(null); setMessage(null); setResendCooldown(0); onModeChange("signin"); }} className="h-10 rounded-xl px-3 text-xs font-bold text-[#668744] hover:bg-[#edf3e4] dark:text-[#acd082] dark:hover:bg-[#27331f]">{t("alreadyVerified")}</button>
+              <button type="button" onClick={() => { setVerificationEmail(null); setMessage(null); setResendCooldown(0); onModeChange("signin"); }} className="yahro-touch-target rounded-xl px-3 text-xs font-bold text-[#668744] hover:bg-[#edf3e4] dark:text-[#acd082] dark:hover:bg-[#27331f]">{t("alreadyVerified")}</button>
             </div>
           </div>
         ) : (
@@ -546,7 +546,7 @@ function AuthDialog({ mode, language, onModeChange, onClose, onDemo, onAuthentic
         </form>
         <div className="my-5 flex items-center gap-3"><span className="h-px flex-1 bg-black/8 dark:bg-white/8" /><span className="text-[10px] uppercase tracking-widest text-[var(--yahro-muted)]">{t("or")}</span><span className="h-px flex-1 bg-black/8 dark:bg-white/8" /></div>
         <button type="button" onClick={onDemo} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-sm font-bold hover:bg-[#f5f5f1] dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/8"><Eye size={16} />{t("demoSession")}</button>
-        <p className="mt-5 text-center text-xs text-[var(--yahro-muted)]">{t(isSignIn ? "switchToUp" : "switchToIn")} <button type="button" onClick={() => onModeChange(isSignIn ? "signup" : "signin")} className="font-bold text-[#5f7e3e] hover:underline dark:text-[#acd082]">{t(isSignIn ? "signUp" : "signIn")}</button></p>
+        <p className="mt-4 flex flex-wrap items-center justify-center gap-x-1 text-center text-xs text-[var(--yahro-muted)]">{t(isSignIn ? "switchToUp" : "switchToIn")} <button type="button" onClick={() => onModeChange(isSignIn ? "signup" : "signin")} className="yahro-touch-target inline-flex items-center rounded-lg px-2 font-bold text-[#5f7e3e] hover:bg-[#edf3e4] hover:underline dark:text-[#acd082] dark:hover:bg-[#27331f]">{t(isSignIn ? "signUp" : "signIn")}</button></p>
         <p className="mt-4 rounded-xl bg-[#edf3e4] px-3 py-2 text-center text-[10px] text-[#607247] dark:bg-[#27331f] dark:text-[#b5ca98]">{t("localNotice")}</p>
           </>
         )}

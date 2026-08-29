@@ -325,7 +325,7 @@ export const api = {
   archiveAccount(accessToken: string, id: string) {
     return request<void>(`/api/accounts/${encodeURIComponent(id)}`, { method: "DELETE", accessToken });
   },
-  transactions(accessToken: string, filters: Partial<{ accountId: string; categoryId: string; type: TransactionType; from: string; to: string; limit: number }> = {}) {
+  transactions(accessToken: string, filters: Partial<{ accountId: string; categoryId: string; type: TransactionType; from: string; to: string; beforeDate: string; beforeId: string; limit: number }> = {}) {
     const query = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => value !== undefined && query.set(key, String(value)));
     const suffix = query.size ? `?${query}` : "";

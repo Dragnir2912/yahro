@@ -19,7 +19,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({ variant = "de
     icon: "size-12 rounded-xl lg:size-10",
   };
 
-  return <button ref={ref} className={cn("inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all disabled:pointer-events-none disabled:opacity-50 active:scale-[.98]", variants[variant], sizes[size], className)} {...props}>{children}</button>;
+  return <button ref={ref} className={cn("yahro-touch-target inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all disabled:pointer-events-none disabled:opacity-50 active:scale-[.98]", variants[variant], sizes[size], className)} {...props}>{children}</button>;
 });
 
 Button.displayName = "Button";
